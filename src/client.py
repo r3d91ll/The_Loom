@@ -149,7 +149,9 @@ class LoomClient:
         Returns:
             Loader selection info
         """
-        response = self.client.get(f"/loaders/probe/{model_id}")
+        # Replace / with -- for URL safety
+        safe_id = model_id.replace("/", "--")
+        response = self.client.get(f"/loaders/probe/{safe_id}")
         response.raise_for_status()
         return cast(dict[str, Any], response.json())
 

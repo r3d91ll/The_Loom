@@ -1,5 +1,6 @@
 """Tests for client utility and Unix socket transport."""
 
+import asyncio
 import os
 import tempfile
 from pathlib import Path
@@ -209,7 +210,8 @@ class TestLoomClientModelsEndpoints:
             client = LoomClient("http://localhost:8080")
             result = client.probe_loader("test/model")
 
-            mock_instance.get.assert_called_once_with("/loaders/probe/test/model")
+            # Model ID with / is encoded as -- for URL safety
+            mock_instance.get.assert_called_once_with("/loaders/probe/test--model")
             assert result["selected_loader"] == "transformers"
 
     def test_load_model(self):
@@ -468,20 +470,19 @@ class TestUnixSocketServerFunctions:
 
             with patch("src.server.uvicorn.Server") as mock_server:
                 mock_instance = MagicMock()
-                mock_instance.serve = MagicMock(return_value=None)
+                # Make serve() an async function that completes immediately
+                mock_instance.serve = MagicMock(
+                    side_effect=lambda: asyncio.sleep(0)
+                )
                 mock_server.return_value = mock_instance
 
                 # The function should remove the existing file before starting
-                # We need to patch uvicorn.Config too
                 with patch("src.server.uvicorn.Config"):
-                    # Call should remove existing socket
-                    try:
-                        await run_unix_server(MagicMock(), socket_path, "info")
-                    except Exception:
-                        pass  # Server may not actually start, that's ok
+                    await run_unix_server(MagicMock(), socket_path, "info")
 
-                    # File should have been removed by the function
-                    # (in real scenario, server would create new one)
+                    # Verify server was started
+                    mock_server.assert_called_once()
+                    mock_instance.serve.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_run_both_servers_calls_gather(self):

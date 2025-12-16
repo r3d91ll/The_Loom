@@ -1,5 +1,6 @@
 """Tests for configuration system."""
 
+import os
 import tempfile
 
 import pytest
@@ -70,15 +71,20 @@ class TestConfigLoading:
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             yaml.dump(config_data, f)
-            f.flush()
-            config = load_config(f.name)
+            temp_path = f.name
 
-        assert config.server.http_port == 9000
-        assert config.gpu.devices == [0, 1]
-        assert config.gpu.default_device == 1
-        assert config.models.max_loaded == 5
-        # Defaults should still apply
-        assert config.server.http_host == "0.0.0.0"
+        try:
+            config = load_config(temp_path)
+
+            assert config.server.http_port == 9000
+            assert config.gpu.devices == [0, 1]
+            assert config.gpu.default_device == 1
+            assert config.models.max_loaded == 5
+            # Defaults should still apply
+            assert config.server.http_host == "0.0.0.0"
+        finally:
+            # Clean up temp file
+            os.unlink(temp_path)
 
     def test_load_nonexistent_file_uses_defaults(self):
         config = load_config("/nonexistent/path/config.yaml")

@@ -371,10 +371,12 @@ def create_http_app(config: Config | None = None) -> FastAPI:
     )
 
     # CORS middleware for browser-based clients
+    # Note: allow_credentials=True with allow_origins=["*"] is insecure
+    # Configure via config.server.cors_origins and cors_allow_credentials
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
+        allow_origins=config.server.cors_origins,
+        allow_credentials=config.server.cors_allow_credentials,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -457,6 +459,8 @@ def create_http_app(config: Config | None = None) -> FastAPI:
 
         Useful for debugging loader selection.
         """
+        # Handle URL encoding (-- back to /)
+        model_id = model_id.replace("--", "/")
         return registry.probe_model(model_id)
 
     @app.post("/models/load", response_model=ModelLoadResponse)

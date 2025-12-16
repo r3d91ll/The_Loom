@@ -137,7 +137,7 @@ class CustomLoader(ModelLoader):
         The custom loader is a fallback - it returns False by default
         and relies on explicit registration or being called as last resort.
         """
-        return model_id in self.configs
+        return self.get_config(model_id) is not None
 
     def get_config(self, model_id: str) -> CustomModelConfig | None:
         """Get custom config for a model if registered."""

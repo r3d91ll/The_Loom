@@ -17,6 +17,14 @@ class ServerConfig(BaseModel):
     http_host: str = Field(default="0.0.0.0", description="HTTP server host")
     http_port: int = Field(default=8080, description="HTTP server port")
     unix_socket: str = Field(default="/tmp/loom.sock", description="Unix socket path")
+    cors_origins: list[str] = Field(
+        default=["*"],
+        description="Allowed CORS origins. Use ['*'] for development, specific origins for production",
+    )
+    cors_allow_credentials: bool = Field(
+        default=False,
+        description="Allow credentials in CORS requests. Should be False when origins is ['*']",
+    )
 
 
 class GPUConfig(BaseModel):
@@ -141,7 +149,7 @@ def load_config(config_path: str | Path | None = None) -> Config:
     """Load configuration from file and environment.
 
     Priority (highest to lowest):
-    1. Environment variables (RESEARCH_SERVER_*)
+    1. Environment variables (LOOM_*)
     2. Specified config file
     3. Auto-discovered config file
     4. Default values
