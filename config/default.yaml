@@ -1,0 +1,66 @@
+# The Loom - Default Configuration
+#
+# Part of the Weaver ecosystem for multi-agent orchestration.
+# Hidden state extraction is the core value proposition for conveyance measurement.
+
+server:
+  transport: http           # http, unix, or both
+  http_host: "0.0.0.0"
+  http_port: 8080
+  unix_socket: /tmp/loom.sock
+
+gpu:
+  devices: [0]              # Available CUDA devices
+  default_device: 0
+  memory_fraction: 0.9      # Max GPU memory usage (0.1-1.0)
+
+models:
+  cache_dir: ~/.cache/huggingface
+  preload: []               # Models to load at startup (empty = load on demand)
+  max_loaded: 3             # Maximum concurrent models in memory
+  default_dtype: auto       # auto, float16, bfloat16, float32
+  trust_remote_code: true   # Allow remote code for custom architectures
+
+# Loader configuration
+loaders:
+  # Order to try loaders during auto-detection
+  fallback_order:
+    - transformers           # Primary: HuggingFace models (~80% coverage)
+    - sentence_transformers  # Embedding models (~15% coverage)
+    - custom                 # Edge cases (~5% coverage)
+
+  # Loader-specific default kwargs (passed to load())
+  transformers_default_kwargs: {}
+  sentence_transformers_default_kwargs: {}
+  custom_default_kwargs: {}
+
+hidden_states:
+  default_layers: [-1]      # Which layers to return (-1 = last, -2 = second-to-last)
+  include_attention: false  # Include attention weights (increases response size)
+  precision: float32        # Precision for serialized hidden states
+
+logging:
+  level: INFO
+  file: null                # null = stdout only, or path like ~/.local/log/loom.log
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Per-model configuration overrides
+# Use this to force specific loaders or settings for certain models
+#
+# model_overrides:
+#   # Force a specific loader
+#   meta-llama/Llama-3.1-8B-Instruct:
+#     loader: transformers       # auto, transformers, sentence_transformers, custom
+#     device: cuda:0
+#     dtype: bfloat16
+#
+#   # Embedding models auto-detected, but can override
+#   sentence-transformers/all-MiniLM-L6-v2:
+#     loader: sentence_transformers
+#     device: cuda:1
+#
+#   # Custom model with specific settings
+#   my-org/custom-model:
+#     loader: custom
+#     device: cuda:0
+#     dtype: float16
