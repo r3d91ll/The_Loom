@@ -373,12 +373,9 @@ class CustomLoader(ModelLoader):
 
         # Check if model supports generation
         if not hasattr(model, "generate"):
-            return GenerationOutput(
-                text="[CustomLoader: Model does not support generate()]",
-                token_ids=[],
-                hidden_states=None,
-                attention_weights=None,
-                metadata={"error": "no_generate_method"},
+            raise NotImplementedError(
+                f"Model {loaded_model.model_id} does not support text generation "
+                "(no generate() method). Use embed() for embedding extraction instead."
             )
 
         gen_kwargs = {
@@ -398,13 +395,9 @@ class CustomLoader(ModelLoader):
             try:
                 outputs = model.generate(**inputs, **gen_kwargs)  # type: ignore[operator]
             except Exception as e:
-                return GenerationOutput(
-                    text=f"[CustomLoader: Generation failed: {e}]",
-                    token_ids=[],
-                    hidden_states=None,
-                    attention_weights=None,
-                    metadata={"error": str(e)},
-                )
+                raise RuntimeError(
+                    f"Generation failed for model {loaded_model.model_id}: {e}"
+                ) from e
 
         inference_time = time.time() - start_time
 
