@@ -24,12 +24,24 @@ class HiddenStateResult:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_list(self) -> list[float]:
-        """Convert to list for JSON serialization."""
+        """
+        Return the hidden state vector as a flat list of floats suitable for JSON serialization.
+        
+        Returns:
+            list[float]: Flattened hidden-state values.
+        """
         result: list[float] = self.vector.flatten().tolist()
         return result
 
     def l2_normalize(self) -> HiddenStateResult:
-        """Return L2-normalized version (critical for geometric analysis)."""
+        """
+        Produce a new HiddenStateResult whose vector is scaled to have unit L2 norm.
+        
+        If the original vector has zero L2 norm, the vector is left unchanged. The returned object's metadata is updated with "normalized": True.
+        
+        Returns:
+            HiddenStateResult: New instance with an L2-normalized vector (or the original vector if its norm is zero) and updated metadata.
+        """
         norm = np.linalg.norm(self.vector)
         if norm > 0:
             normalized = self.vector / norm
@@ -48,14 +60,15 @@ def extract_hidden_states(
     hidden_states_dict: dict[int, torch.Tensor],
     normalize: bool = False,
 ) -> dict[int, HiddenStateResult]:
-    """Convert hidden state tensors to HiddenStateResult objects.
-
-    Args:
-        hidden_states_dict: Mapping of layer index to tensor
-        normalize: Whether to L2 normalize the vectors
-
+    """
+    Convert a mapping of layer indices to tensor/array-like hidden states into HiddenStateResult objects.
+    
+    Parameters:
+        hidden_states_dict (dict[int, torch.Tensor | array-like]): Mapping from layer index to a tensor or array-like hidden state. Each value will be converted to a NumPy array and any leading batch dimension will be removed via squeeze.
+        normalize (bool): If True, return L2-normalized vectors in the resulting HiddenStateResult objects.
+    
     Returns:
-        Mapping of layer index to HiddenStateResult
+        dict[int, HiddenStateResult]: Mapping from layer index to the corresponding HiddenStateResult containing the (optionally normalized) vector, its shape, layer index, dtype, and metadata.
     """
     results: dict[int, HiddenStateResult] = {}
 
@@ -87,20 +100,17 @@ def compute_d_eff(
     embeddings: np.ndarray,
     variance_threshold: float = 0.90,
 ) -> int:
-    """Compute effective dimensionality via PCA.
-
-    D_eff is the primary metric in the Conveyance Framework - it measures
-    the semantic richness of representations.
-
-    CRITICAL: L2 normalize embeddings first to prevent magnitude artifacts
-    from dominating variance.
-
-    Args:
-        embeddings: Array of shape [n_samples, hidden_dim] or [hidden_dim]
-        variance_threshold: Cumulative variance threshold (default 0.90)
-
+    """
+    Compute the effective dimensionality (D_eff) of a set of embeddings using PCA.
+    
+    D_eff is the smallest number of principal components whose cumulative variance meets or exceeds the given variance_threshold. Each embedding row is L2-normalized and mean-centered before variance is computed.
+    
+    Parameters:
+        embeddings (np.ndarray): Array of shape [n_samples, hidden_dim] or a 1-D array [hidden_dim].
+        variance_threshold (float): Cumulative variance fraction to reach (e.g., 0.90).
+    
     Returns:
-        Number of dimensions capturing the specified variance
+        int: Number of dimensions required to capture at least `variance_threshold` of the variance (clamped to the feature dimension).
     """
     # Handle single vector case
     if embeddings.ndim == 1:
@@ -147,22 +157,15 @@ def compute_beta(
     input_d_eff: int,
     output_d_eff: int,
 ) -> float:
-    """Compute collapse indicator beta.
-
-    Beta is a DIAGNOSTIC metric (not optimization target) in the
-    Conveyance Framework. High beta indicates dimensional collapse.
-
-    Beta = D_eff_input / D_eff_output
-
-    Target: beta < 2.0 (healthy)
-    Warning: beta > 2.5 (concerning)
-
-    Args:
-        input_d_eff: Effective dimensionality before processing
-        output_d_eff: Effective dimensionality after processing
-
+    """
+    Compute the collapse indicator beta measuring the relative change in effective dimensionality.
+    
+    Parameters:
+        input_d_eff (int): Effective dimensionality before processing.
+        output_d_eff (int): Effective dimensionality after processing.
+    
     Returns:
-        Beta collapse indicator
+        float: The ratio input_d_eff / output_d_eff; returns `float('inf')` if output_d_eff is 0 to indicate complete collapse.
     """
     if output_d_eff == 0:
         return float("inf")  # Complete collapse
@@ -173,17 +176,17 @@ def compute_geometric_alignment(
     embedding_a: np.ndarray,
     embedding_b: np.ndarray,
 ) -> float:
-    """Compute cosine similarity between two embeddings.
-
-    This measures geometric alignment between agent representations -
-    a key metric for bilateral conveyance measurement.
-
-    Args:
-        embedding_a: First embedding vector
-        embedding_b: Second embedding vector
-
+    """
+    Measure geometric alignment between two embeddings by computing their cosine similarity.
+    
+    Inputs are flattened to 1-D; if either vector has zero L2 norm, the function returns 0.0.
+    
+    Parameters:
+        embedding_a (np.ndarray): First embedding; will be flattened before computation.
+        embedding_b (np.ndarray): Second embedding; will be flattened before computation.
+    
     Returns:
-        Cosine similarity in [-1, 1]
+        float: Cosine similarity in [-1, 1]; `0.0` if either input has zero L2 norm.
     """
     # Flatten if needed
     a = embedding_a.flatten()
@@ -202,9 +205,21 @@ def compute_geometric_alignment(
 def analyze_hidden_state(
     hidden_state: HiddenStateResult,
 ) -> dict[str, Any]:
-    """Compute diagnostic metrics for a hidden state.
-
-    Returns a dictionary of metrics useful for research analysis.
+    """
+    Compute diagnostic statistics for a HiddenStateResult.
+    
+    Parameters:
+        hidden_state (HiddenStateResult): Container holding the hidden-state vector and related metadata.
+    
+    Returns:
+        dict[str, Any]: Mapping of computed metrics including:
+            - `shape`: original vector shape.
+            - `layer`: layer index.
+            - `dtype`: original data type as a string.
+            - `mean`, `std`, `min`, `max`: basic summary statistics.
+            - `l2_norm`: Euclidean norm of the flattened vector.
+            - `sparsity`: fraction of elements with absolute value less than 1e-6.
+            - `percentile_25`, `percentile_50`, `percentile_75`: quartile values when the vector contains at least one element.
     """
     vector = hidden_state.vector.flatten()
 

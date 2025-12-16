@@ -159,7 +159,12 @@ def is_metrics_available() -> bool:
 
 
 def get_metrics() -> bytes:
-    """Get current metrics in Prometheus format."""
+    """
+    Retrieve a snapshot of current metrics in Prometheus text exposition format.
+    
+    Returns:
+        bytes: The metrics payload in Prometheus text format. If the Prometheus client is not available, returns a short bytes message indicating it is not installed.
+    """
     if not _prometheus_available:
         return b"# prometheus_client not installed\n"
 
@@ -178,7 +183,15 @@ def record_request(
     status: int,
     latency: float,
 ) -> None:
-    """Record an HTTP request."""
+    """
+    Record an HTTP request metric for Prometheus.
+    
+    Parameters:
+        endpoint (str): Logical endpoint or route name used as the `endpoint` label.
+        method (str): HTTP method (e.g., "GET", "POST") used as the `method` label.
+        status (int): HTTP response status code used as the `status` label.
+        latency (float): Request latency in seconds to observe on the request latency histogram.
+    """
     if not _prometheus_available:
         return
 
@@ -199,7 +212,14 @@ def record_generation(
     tokens: int,
     latency: float,
 ) -> None:
-    """Record a text generation operation."""
+    """
+    Record token and latency metrics for a model generation event.
+    
+    Parameters:
+        model (str): Name or identifier of the model that produced the tokens.
+        tokens (int): Number of tokens generated.
+        latency (float): Generation time in seconds.
+    """
     if not _prometheus_available:
         return
 
@@ -212,7 +232,13 @@ def record_embedding(
     model: str,
     latency: float,
 ) -> None:
-    """Record an embedding extraction."""
+    """
+    Record metrics for a single embedding extraction event.
+    
+    Parameters:
+        model (str): Name or identifier of the model used for the embedding.
+        latency (float): Elapsed time in seconds for the embedding extraction.
+    """
     if not _prometheus_available:
         return
 
@@ -228,7 +254,16 @@ def record_model_load(
     latency: float,
     success: bool,
 ) -> None:
-    """Record a model load operation."""
+    """
+    Emit Prometheus metrics for a model load attempt.
+    
+    Parameters:
+        model (str): Name or identifier of the model being loaded.
+        loader (str): Loader implementation or source used to load the model (e.g., "transformers", "s3").
+        quantization (str): Quantization/precision label applied to the model (e.g., "fp16", "int8", "none").
+        latency (float): Observed load duration in seconds.
+        success (bool): True if the load completed successfully; False for a failed attempt.
+    """
     if not _prometheus_available:
         return
 
@@ -250,7 +285,14 @@ def record_model_load(
 
 
 def set_models_loaded(count: int) -> None:
-    """Set the number of loaded models."""
+    """
+    Set the gauge for the current number of loaded models.
+    
+    If the Prometheus client is not available, this function does nothing.
+    
+    Parameters:
+        count (int): Total number of models currently loaded; updates the models-loaded gauge to this value.
+    """
     if not _prometheus_available:
         return
 
@@ -259,7 +301,14 @@ def set_models_loaded(count: int) -> None:
 
 
 def record_gpu_memory(device: str, used_bytes: int, total_bytes: int) -> None:
-    """Record GPU memory usage."""
+    """
+    Record GPU memory usage for a given device in the Prometheus metrics.
+    
+    Parameters:
+        device (str): Identifier of the GPU device (label used in metrics).
+        used_bytes (int): Number of bytes currently used on the device.
+        total_bytes (int): Total number of bytes available on the device.
+    """
     if not _prometheus_available:
         return
 
@@ -275,7 +324,16 @@ def record_gpu_memory(device: str, used_bytes: int, total_bytes: int) -> None:
 
 @contextmanager
 def track_request_latency(endpoint: str, method: str) -> Generator[None, None, None]:
-    """Context manager to track request latency."""
+    """
+    Measure and emit request latency to Prometheus when available.
+    
+    Parameters:
+        endpoint (str): The request endpoint label (e.g., path or route) used for the metric.
+        method (str): The HTTP method label (e.g., "GET", "POST") used for the metric.
+    
+    Description:
+        Acts as a context manager that records the elapsed time between entering and exiting the context and, if Prometheus metrics are enabled, observes that latency on the request latency histogram with the provided endpoint and method labels.
+    """
     start = time.perf_counter()
     try:
         yield
@@ -290,13 +348,28 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 
 def track_generation(model_getter: Callable[[Any], str]) -> Callable[[F], F]:
-    """Decorator to track generation metrics.
-
-    Args:
-        model_getter: Function to extract model name from args/kwargs
+    """
+    Create a decorator that records generation metrics (token count and latency) for each invocation of the wrapped function.
+    
+    The provided `model_getter` is called with the wrapped function's positional and keyword arguments to determine the model name used for metrics. After the wrapped function executes, the decorator records the elapsed time and the number of tokens produced: it uses `result.token_count` if present, otherwise the length of `result.token_ids` if present, otherwise `0`. The wrapped function's return value is returned unchanged.
+    
+    Parameters:
+        model_getter (Callable[[Any], str]): Function that accepts the wrapped function's `*args` and `**kwargs` and returns the model name to label metrics.
+    
+    Returns:
+        Callable[[F], F]: A decorator that wraps a function to record generation latency and token count for the model returned by `model_getter`.
     """
 
     def decorator(func: F) -> F:
+        """
+        Wraps `func` to measure its execution latency, extract the model name and token count from the result, and record generation metrics.
+        
+        Parameters:
+            func (callable): The function to wrap. The wrapper will call `func` with the same arguments.
+        
+        Returns:
+            callable: A wrapper around `func` that, on each call, measures elapsed time, obtains the model name using the surrounding `model_getter`, determines tokens as `result.token_count` if present or `len(result.token_ids)` if present (0 if neither), calls `record_generation(model, tokens, latency)`, and returns `func`'s original result.
+        """
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             start = time.perf_counter()

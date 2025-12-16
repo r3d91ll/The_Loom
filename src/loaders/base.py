@@ -69,7 +69,15 @@ class LoadedModel:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to(self, device: torch.device | str) -> LoadedModel:
-        """Move model to a different device."""
+        """
+        Move the contained model to the specified device and update the container's device attribute.
+        
+        Parameters:
+            device (torch.device | str): Target device or device string (e.g., "cuda:0", "cpu").
+        
+        Returns:
+            LoadedModel: The same LoadedModel instance after the model has been moved to the target device.
+        """
         if isinstance(device, str):
             device = torch.device(device)
         self.model = self.model.to(device)  # type: ignore[arg-type]
@@ -95,13 +103,14 @@ class ModelLoader(ABC):
 
     @abstractmethod
     def can_load(self, model_id: str) -> bool:
-        """Check if this loader can handle the given model.
-
-        Args:
-            model_id: HuggingFace model ID or local path
-
+        """
+        Determine whether this loader is able to load the specified model.
+        
+        Parameters:
+            model_id (str): HuggingFace model ID or local filesystem path identifying the model.
+        
         Returns:
-            True if this loader can load the model
+            `True` if the loader can load the model, `False` otherwise.
         """
         ...
 
@@ -113,16 +122,17 @@ class ModelLoader(ABC):
         dtype: str = "auto",
         **kwargs: Any,
     ) -> LoadedModel:
-        """Load a model and tokenizer.
-
-        Args:
-            model_id: HuggingFace model ID or local path
-            device: Device to load model on (e.g., "cuda:0", "cpu")
-            dtype: Data type (auto, float16, bfloat16, float32)
-            **kwargs: Additional loader-specific arguments
-
+        """
+        Load a model and its tokenizer into a LoadedModel container.
+        
+        Parameters:
+            model_id (str): HuggingFace model identifier or local filesystem path.
+            device (str): Target device for the model (e.g., "cuda:0" or "cpu").
+            dtype (str): Data type selection; one of "auto", "float16", "bfloat16", or "float32".
+            **kwargs: Loader-specific options passed through to the implementation.
+        
         Returns:
-            LoadedModel container with model, tokenizer, and metadata
+            LoadedModel: Container holding the loaded model, tokenizer, model_id, device, dtype, model dimensions, loader_type, and any loader metadata.
         """
         ...
 
@@ -138,20 +148,21 @@ class ModelLoader(ABC):
         return_attention: bool = False,
         **kwargs: Any,
     ) -> GenerationOutput:
-        """Generate text and optionally extract hidden states.
-
-        Args:
-            loaded_model: Previously loaded model container
-            prompt: Input prompt text
-            max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature
-            return_hidden_states: Whether to return hidden states
-            hidden_state_layers: Which layers to return (-1 = last)
-            return_attention: Whether to return attention weights
-            **kwargs: Additional generation arguments
-
+        """
+        Produce generated text for a prompt and optionally include model hidden states and attention weights.
+        
+        Parameters:
+            loaded_model (LoadedModel): Container holding the model and tokenizer for generation.
+            prompt (str): Input prompt text to generate from.
+            max_tokens (int): Maximum number of tokens to generate.
+            temperature (float): Sampling temperature controlling randomness.
+            return_hidden_states (bool): If true, include hidden states in the result.
+            hidden_state_layers (list[int] | None): Specific layer indices to return; use [-1] or -1 to indicate the last layer.
+            return_attention (bool): If true, include attention weight tensors in the result.
+            **kwargs (Any): Additional backend-specific generation options.
+        
         Returns:
-            GenerationOutput with text, tokens, and optionally hidden states
+            GenerationOutput: Generated text, token ids, and optionally hidden_states and attention_weights along with metadata.
         """
         ...
 
@@ -163,16 +174,17 @@ class ModelLoader(ABC):
         pooling: str = "last_token",
         **kwargs: Any,
     ) -> EmbeddingOutput:
-        """Extract embedding for text.
-
-        Args:
-            loaded_model: Previously loaded model container
-            text: Input text to embed
-            pooling: Pooling strategy (last_token, mean, cls)
-            **kwargs: Additional arguments
-
+        """
+        Compute an embedding vector for the given text using the provided loaded model.
+        
+        Parameters:
+            loaded_model (LoadedModel): Container with model and tokenizer to use for embedding.
+            text (str): Input text to convert into an embedding.
+            pooling (str): Pooling strategy to produce a single vector from token-level representations. Supported values: "last_token", "mean", "cls".
+            **kwargs: Additional backend-specific options passed to the loader implementation.
+        
         Returns:
-            EmbeddingOutput with embedding tensor and metadata
+            EmbeddingOutput: Contains the embedding tensor, its shape, and any backend metadata.
         """
         ...
 
@@ -186,24 +198,22 @@ class ModelLoader(ABC):
         hidden_state_layers: list[int] | None = None,
         **kwargs: Any,
     ) -> Iterator[StreamingToken | StreamingOutput]:
-        """Generate text with streaming token output.
-
-        Yields tokens as they're generated, then optionally yields
-        a StreamingOutput with hidden states at the end.
-
-        Default implementation falls back to non-streaming generate.
-
-        Args:
-            loaded_model: Previously loaded model container
-            prompt: Input prompt text
-            max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature
-            return_hidden_states: Whether to return hidden states at end
-            hidden_state_layers: Which layers to return (-1 = last)
-            **kwargs: Additional generation arguments
-
+        """
+        Produce streaming token events for a generation request, falling back to the synchronous `generate` implementation.
+        
+        This default implementation calls `generate`, yields a StreamingToken for each produced token (decoded via the loader's tokenizer), and then yields a final StreamingOutput containing the full text, token ids, token count, optional hidden states, and metadata.
+        
+        Parameters:
+            loaded_model: Container holding the model and tokenizer used for decoding.
+            prompt: Input prompt text to generate from.
+            max_tokens: Maximum number of tokens to generate.
+            temperature: Sampling temperature for generation.
+            return_hidden_states: If true, include hidden states in the final StreamingOutput.
+            hidden_state_layers: Specific layer indices to include in hidden states (`-1` denotes the last layer). If None, layer selection is backend-dependent.
+            **kwargs: Additional generation options forwarded to the underlying `generate` method.
+        
         Yields:
-            StreamingToken for each token, then StreamingOutput at end
+            StreamingToken for each generated token (with `is_finished` true and `finish_reason="stop"` on the last token), followed by a single StreamingOutput summarizing the complete generation.
         """
         # Default: fall back to non-streaming
         output = self.generate(
@@ -238,14 +248,15 @@ class ModelLoader(ABC):
 
 
 def resolve_dtype(dtype_str: str, device: torch.device) -> torch.dtype:
-    """Resolve dtype string to torch.dtype.
-
-    Args:
-        dtype_str: One of "auto", "float16", "bfloat16", "float32"
-        device: Target device (affects auto resolution)
-
+    """
+    Resolve a dtype name to a torch.dtype, using the device when dtype_str is "auto".
+    
+    Parameters:
+        dtype_str (str): One of "auto", "float16", "bfloat16", or "float32".
+        device (torch.device): Target device used to decide "auto" resolution.
+    
     Returns:
-        Resolved torch.dtype
+        torch.dtype: The resolved torch dtype. For "auto", returns `torch.bfloat16` on CUDA devices with major capability >= 8, `torch.float16` on other CUDA devices, and `torch.float32` on non-CUDA devices.
     """
     if dtype_str == "auto":
         # Use bfloat16 on modern CUDA devices, float16 otherwise

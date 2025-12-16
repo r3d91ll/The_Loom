@@ -59,6 +59,20 @@ class LoomClient:
     """
 
     def __init__(self, base_url: str = "http://localhost:8080", timeout: float = 300.0):
+        """
+        Initialize a LoomClient with the given base URL and request timeout.
+        
+        Parameters:
+            base_url (str): Base address of the Loom server. Accepts HTTP URLs (e.g. "http://host:port")
+                or a Unix socket URL using the "unix" scheme (e.g. "unix:///path/to/socket").
+            timeout (float): Default request timeout in seconds.
+        
+        Behavior:
+            - Determines whether the client will use an HTTP transport or a Unix domain socket by
+              parsing `base_url`. If a Unix socket URL is provided, `socket_path` is set to the socket
+              file path and an internal HTTP dummy base is used for the underlying HTTP client.
+            - Stores `base_url`, `timeout`, and initializes internal client-related attributes.
+        """
         self.base_url = base_url
         self.timeout = timeout
         self._client: httpx.Client | None = None
@@ -77,7 +91,12 @@ class LoomClient:
 
     @property
     def client(self) -> httpx.Client:
-        """Get or create the HTTP client."""
+        """
+        Lazily create and return a cached httpx.Client configured for the client's base URL and transport.
+        
+        Returns:
+            httpx.Client: The cached HTTP client instance. For Unix socket base URLs the client uses a UDS transport; otherwise it uses a standard HTTP transport.
+        """
         if self._client is None:
             if self.is_unix_socket:
                 # Create Unix socket transport
@@ -95,15 +114,34 @@ class LoomClient:
         return self._client
 
     def close(self) -> None:
-        """Close the client connection."""
+        """
+        Close the underlying HTTP client and clear the cached client reference.
+        
+        Closes the internal httpx.Client if present and sets the cached client to None; safe to call multiple times.
+        """
         if self._client is not None:
             self._client.close()
             self._client = None
 
     def __enter__(self) -> LoomClient:
+        """
+        Enter a context manager and yield this LoomClient instance.
+        
+        Returns:
+            LoomClient: The LoomClient instance.
+        """
         return self
 
     def __exit__(self, *args: Any) -> None:
+        """
+        Close the client's underlying HTTP connection when exiting a context manager.
+        
+        Parameters:
+            *args (Any): Standard context-manager exception information (exc_type, exc_value, traceback); these values are ignored by this method.
+        
+        Notes:
+            This method does not suppress exceptions raised inside the context.
+        """
         self.close()
 
     # ========================================================================
@@ -111,20 +149,25 @@ class LoomClient:
     # ========================================================================
 
     def health(self) -> dict[str, Any]:
-        """Check server health.
-
+        """
+        Retrieve the server's health information.
+        
         Returns:
-            Health status including GPU info and config
+            dict: Health information as returned by the server, typically including GPU details and server configuration.
+        
+        Raises:
+            httpx.HTTPStatusError: If the server responds with a non-2xx status code.
         """
         response = self.client.get("/health")
         response.raise_for_status()
         return cast(dict[str, Any], response.json())
 
     def list_models(self) -> dict[str, Any]:
-        """List loaded models.
-
+        """
+        Retrieve the server's list of currently loaded models and capacity information.
+        
         Returns:
-            Dict with loaded_models list and max_models
+            dict: Dictionary with keys `loaded_models` (list) and `max_models` (int).
         """
         response = self.client.get("/models")
         response.raise_for_status()
@@ -141,13 +184,14 @@ class LoomClient:
         return cast(dict[str, Any], response.json())
 
     def probe_loader(self, model_id: str) -> dict[str, Any]:
-        """Probe which loader would handle a model.
-
-        Args:
-            model_id: Model identifier
-
+        """
+        Determine which loader the server would select for the given model identifier.
+        
+        Parameters:
+        	model_id (str): Model identifier to probe.
+        
         Returns:
-            Loader selection info
+        	selection_info (dict[str, Any]): Server response describing loader selection and related metadata.
         """
         response = self.client.get(f"/loaders/probe/{model_id}")
         response.raise_for_status()
@@ -193,13 +237,14 @@ class LoomClient:
         return cast(dict[str, Any], response.json())
 
     def unload_model(self, model_id: str) -> dict[str, Any]:
-        """Unload a model from memory.
-
-        Args:
-            model_id: Model identifier (use -- for / in path)
-
+        """
+        Unload the specified model from the server's memory.
+        
+        Parameters:
+            model_id (str): Model identifier. Forward slashes in the identifier will be encoded as `--` for the request URL.
+        
         Returns:
-            Unload status
+            dict[str, Any]: JSON response from the server describing the unload status.
         """
         # Replace / with -- for URL
         safe_id = model_id.replace("/", "--")
@@ -223,24 +268,17 @@ class LoomClient:
         hidden_state_format: str = "list",
         loader: str | None = None,
     ) -> dict[str, Any]:
-        """Generate text with optional hidden state extraction.
-
-        This is the core research endpoint - returns the geometric
-        representation (hidden state) alongside the generated text.
-
-        Args:
-            model: Model ID
-            prompt: Input prompt text
-            max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature
-            top_p: Nucleus sampling probability
-            return_hidden_states: Whether to return hidden states
-            hidden_state_layers: Which layers to return (-1 = last)
-            hidden_state_format: Format for hidden states (list or base64)
-            loader: Force specific loader
-
+        """
+        Generate text from a model and optionally return its hidden states.
+        
+        Parameters:
+            return_hidden_states (bool): If True, include hidden state data in the response.
+            hidden_state_layers (list[int] | None): List of layer indices to return (use -1 for the last layer).
+            hidden_state_format (str): Output format for hidden states; commonly "list" or "base64".
+            loader (str | None): If provided, force a specific model loader implementation.
+        
         Returns:
-            Generation output with text, token_count, hidden_states, metadata
+            dict[str, Any]: A dictionary containing the generation result, including `text`, `token_count`, `token_ids`, and, if requested, `hidden_states` and `metadata`.
         """
         payload = {
             "model": model,
@@ -267,16 +305,15 @@ class LoomClient:
         pooling: str = "last_token",
         normalize: bool = False,
     ) -> dict[str, Any]:
-        """Extract embedding for text.
-
-        Args:
-            model: Model ID
-            text: Text to embed
-            pooling: Pooling strategy (last_token, mean, first_token)
-            normalize: Whether to L2 normalize the embedding
-
+        """
+        Compute an embedding vector for the given text using the specified model and pooling strategy.
+        
+        Parameters:
+            pooling (str): Pooling strategy to reduce token-level representations into a single vector. Supported values: "last_token", "mean", "first_token".
+            normalize (bool): If True, L2-normalize the resulting embedding vector.
+        
         Returns:
-            Embedding output with embedding vector, shape, metadata
+            dict[str, Any]: Response containing the embedding vector (key "embedding"), its shape (key "shape"), and optional metadata (key "metadata").
         """
         payload = {
             "model": model,
@@ -295,17 +332,16 @@ class LoomClient:
         text: str,
         pooling: str = "last_token",
     ) -> dict[str, Any]:
-        """Extract embedding and compute diagnostic metrics.
-
-        Returns hidden state analysis including D_eff estimation.
-
-        Args:
-            model: Model ID
-            text: Text to analyze
-            pooling: Pooling strategy
-
+        """
+        Compute embeddings and diagnostic metrics for the given text using the specified model.
+        
+        Parameters:
+            model (str): Model identifier to use for analysis.
+            text (str): Input text to analyze.
+            pooling (str): Pooling strategy for producing the embedding (e.g., "last_token").
+        
         Returns:
-            Analysis with shape, stats, D_eff estimation, etc.
+            dict[str, Any]: Analysis results including embedding, tensor shapes, statistics, and an estimated effective dimensionality (`D_eff`), along with any additional diagnostic metadata.
         """
         payload = {
             "model": model,
@@ -329,23 +365,22 @@ class LoomClient:
         hidden_state_format: str = "list",
         loader: str | None = None,
     ) -> dict[str, Any]:
-        """Generate text for multiple prompts in a batch.
-
-        Efficiently processes all prompts with the same model.
-
-        Args:
-            model: Model ID
-            prompts: List of input prompts
-            max_tokens: Maximum tokens per generation
-            temperature: Sampling temperature
-            top_p: Nucleus sampling probability
-            return_hidden_states: Whether to return hidden states
-            hidden_state_layers: Which layers to return (-1 = last)
-            hidden_state_format: Format for hidden states (list or base64)
-            loader: Force specific loader
-
+        """
+        Generate text for multiple prompts using the same model in a single request.
+        
+        Parameters:
+            model (str): Model ID to use for all prompts.
+            prompts (list[str]): Input prompts to generate text for.
+            max_tokens (int): Maximum tokens to generate per prompt.
+            temperature (float): Sampling temperature for generation.
+            top_p (float): Nucleus sampling probability.
+            return_hidden_states (bool): If true, include hidden states in each result.
+            hidden_state_layers (list[int] | None): List of layer indices to return (use -1 for last layer).
+            hidden_state_format (str): Format for hidden states, e.g., "list" or "base64".
+            loader (str | None): Optional loader name to force for the request.
+        
         Returns:
-            Batch response with results array and totals
+            dict[str, Any]: Response dictionary containing a `results` array with per-prompt outputs and any aggregate totals.
         """
         payload: dict[str, Any] = {
             "model": model,
@@ -372,18 +407,17 @@ class LoomClient:
         pooling: str = "last_token",
         normalize: bool = False,
     ) -> dict[str, Any]:
-        """Extract embeddings for multiple texts in a batch.
-
-        Efficiently processes all texts with the same model.
-
-        Args:
-            model: Model ID
-            texts: List of texts to embed
-            pooling: Pooling strategy (last_token, mean, first_token)
-            normalize: Whether to L2 normalize the embeddings
-
+        """
+        Extract embeddings for multiple texts using the specified model in a single batch.
+        
+        Parameters:
+            model (str): Model identifier to use for embedding.
+            texts (list[str]): Texts to embed; order of returned embeddings matches this list.
+            pooling (str): Pooling strategy to produce a single vector per text. One of "last_token", "mean", or "first_token".
+            normalize (bool): If true, L2-normalize each embedding vector.
+        
         Returns:
-            Batch response with embeddings array and totals
+            dict[str, Any]: Parsed JSON response containing the batch embeddings (typically under an "embeddings" key) and related totals/metadata.
         """
         payload = {
             "model": model,
@@ -408,23 +442,22 @@ class LoomClient:
         hidden_state_format: str = "list",
         loader: str | None = None,
     ) -> Iterator[StreamingToken | StreamingResult]:
-        """Generate text with streaming token output.
-
-        Uses Server-Sent Events for real-time token streaming.
-
-        Args:
-            model: Model ID
-            prompt: Input prompt text
-            max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature
-            top_p: Nucleus sampling probability
-            return_hidden_states: Whether to return hidden states in final event
-            hidden_state_layers: Which layers to return (-1 = last)
-            hidden_state_format: Format for hidden states (list or base64)
-            loader: Force specific loader
-
-        Yields:
-            StreamingToken for each token, then StreamingResult at end
+        """
+        Stream generation results from the server as token events followed by a final result.
+        
+        Parameters:
+            model (str): Model identifier to use for generation.
+            prompt (str): Input prompt text to generate from.
+            max_tokens (int): Maximum number of tokens to generate.
+            temperature (float): Sampling temperature controlling randomness.
+            top_p (float): Nucleus sampling probability threshold.
+            return_hidden_states (bool): Include hidden states in the final result when True.
+            hidden_state_layers (list[int] | None): Layers to include for hidden states (use -1 for last layer).
+            hidden_state_format (str): Output format for hidden states, e.g. "list" or "base64".
+            loader (str | None): If provided, force a specific loader to use.
+        
+        Returns:
+            Iterator[StreamingToken | StreamingResult]: Yields a StreamingToken for each streamed token event, then a single StreamingResult when generation completes; raises RuntimeError if a streaming error event is received.
         """
         payload: dict[str, Any] = {
             "model": model,

@@ -38,11 +38,16 @@ class GPUManager:
         allowed_devices: list[int] | None = None,
         memory_fraction: float = 0.9,
     ):
-        """Initialize GPU manager.
-
-        Args:
-            allowed_devices: List of CUDA device indices to use (None = all)
-            memory_fraction: Maximum fraction of GPU memory to use
+        """
+        Create a GPUManager configured with which CUDA devices may be used and the maximum fraction of GPU memory to consume.
+        
+        Parameters:
+            allowed_devices (list[int] | None): Specific CUDA device indices to allow. If None, all detected CUDA devices are allowed.
+            memory_fraction (float): Fraction (0.0-1.0) of each GPU's memory that the manager should consider available for workloads.
+        
+        Behavior:
+            - If CUDA is not available, logs a warning and sets both `available_devices` and `allowed_devices` to empty lists.
+            - When CUDA is available, detects all CUDA devices, populates `available_devices`, and sets `allowed_devices` to the intersection of the provided list and detected devices (or all detected devices if `allowed_devices` is None).
         """
         self.memory_fraction = memory_fraction
 
@@ -67,27 +72,40 @@ class GPUManager:
 
     @property
     def has_gpu(self) -> bool:
-        """Check if any GPU is available."""
+        """
+        Return whether at least one GPU device is allowed for use.
+        
+        Returns:
+            `True` if there is at least one allowed GPU device, `False` otherwise.
+        """
         return len(self.allowed_devices) > 0
 
     @property
     def default_device(self) -> str:
-        """Get the default device string."""
+        """
+        Selects the default device used for computations.
+        
+        Returns:
+            str: `"cuda:<index>"` for the first allowed GPU, `"cpu"` if no GPUs are available.
+        """
         if self.has_gpu:
             return f"cuda:{self.allowed_devices[0]}"
         return "cpu"
 
     def get_device(self, device: str | int | None = None) -> torch.device:
-        """Get a torch device, validating it's allowed.
-
-        Args:
-            device: Device specification (None = default)
-                - None: Use default device
-                - int: CUDA device index
-                - str: "cuda:0", "cpu", etc.
-
+        """
+        Resolve and validate a device specification against the manager's allowed devices.
+        
+        Parameters:
+            device: Device specification to resolve. If None, the manager's default device is used.
+                Accepts an integer index (interpreted as a CUDA device), a device string (e.g., "cuda:0", "cpu"),
+                or None. CUDA device selections are validated against the manager's allowed_devices.
+        
         Returns:
-            torch.device object
+            torch.device: The resolved torch device.
+        
+        Raises:
+            ValueError: If a specified CUDA device index is not present in allowed_devices.
         """
         if device is None:
             return torch.device(self.default_device)
@@ -110,13 +128,16 @@ class GPUManager:
         return torch_device
 
     def get_gpu_info(self, device_idx: int | None = None) -> GPUInfo | list[GPUInfo]:
-        """Get information about GPU(s).
-
+        """
+        Retrieve GPU information for a specific allowed device or for all allowed devices.
+        
         Args:
-            device_idx: Specific device index, or None for all allowed devices
-
+            device_idx (int | None): Index of an allowed GPU to query. If None, returns information for all allowed devices.
+        
         Returns:
-            GPUInfo for single device, or list for all devices
+            GPUInfo: Information for the specified device;
+            list[GPUInfo]: Information for all allowed devices;
+            an empty list if no GPUs are available.
         """
         if not self.has_gpu:
             return []
@@ -127,7 +148,15 @@ class GPUManager:
         return [self._get_single_gpu_info(idx) for idx in self.allowed_devices]
 
     def _get_single_gpu_info(self, device_idx: int) -> GPUInfo:
-        """Get info for a single GPU."""
+        """
+        Return detailed information about a single GPU device identified by index.
+        
+        Parameters:
+            device_idx (int): Index of the CUDA device to query.
+        
+        Returns:
+            GPUInfo: Information for the specified GPU including index, name, total_memory_gb, free_memory_gb, used_memory_gb, utilization_percent (`None` if unavailable), and compute_capability as a (major, minor) tuple.
+        """
         props = torch.cuda.get_device_properties(device_idx)
 
         # Get memory info
@@ -148,13 +177,14 @@ class GPUManager:
         )
 
     def get_best_device(self, required_memory_gb: float = 0) -> str:
-        """Get the best available device based on free memory.
-
-        Args:
-            required_memory_gb: Minimum required free memory
-
+        """
+        Selects the best available device based on free GPU memory.
+        
+        Parameters:
+            required_memory_gb (float): Minimum required free memory in gigabytes.
+        
         Returns:
-            Device string (e.g., "cuda:0")
+            str: Device identifier — `"cpu"` if no GPUs are available, otherwise `"cuda:<index>"`. If no allowed GPU has at least `required_memory_gb` free, returns the first allowed GPU as `"cuda:<index>"`.
         """
         if not self.has_gpu:
             return "cpu"
@@ -178,10 +208,11 @@ class GPUManager:
         return f"cuda:{best_device}"
 
     def clear_cache(self, device: int | str | None = None) -> None:
-        """Clear CUDA cache for device(s).
-
-        Args:
-            device: Specific device, or None for all
+        """
+        Clear CUDA memory cache for a specific device or for all allowed devices.
+        
+        Parameters:
+            device (int | str | None): Device index (e.g., 0), or device string like "cuda:0". If None, clears cache on all allowed devices.
         """
         if not self.has_gpu:
             return
@@ -203,16 +234,17 @@ class GPUManager:
         num_params: int,
         dtype: str = "float16",
     ) -> float:
-        """Estimate memory required for a model.
-
-        This is a rough estimate - actual memory varies by architecture.
-
-        Args:
-            num_params: Number of model parameters
-            dtype: Data type (float16, bfloat16, float32)
-
+        """
+        Estimate model memory usage in gigabytes.
+        
+        Estimates total memory for model parameters plus a typical ~20% overhead for activations/optimizer states based on the number of parameters and parameter data type.
+        
+        Parameters:
+            num_params (int): Total number of model parameters.
+            dtype (str): Parameter data type; common values include "float16", "bfloat16", "float32", and "int8".
+        
         Returns:
-            Estimated memory in GB
+            Estimated memory in gigabytes as a float.
         """
         bytes_per_param = {
             "float16": 2,
@@ -228,7 +260,23 @@ class GPUManager:
         return base_memory * 1.2
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for API responses."""
+        """
+        Serialize the GPUManager state and per-GPU information into a dictionary for API responses.
+        
+        Returns:
+            result (dict[str, Any]): Dictionary containing:
+                - has_gpu (bool): Whether any GPU is allowed/available.
+                - default_device (str): The default device string (e.g., "cuda:0" or "cpu").
+                - allowed_devices (list[int]): List of allowed GPU indices.
+                - memory_fraction (float): Configured memory fraction for allocations.
+                - gpus (list[dict]): Per-GPU dictionaries with keys:
+                    - index (int): GPU index.
+                    - name (str): GPU name.
+                    - total_memory_gb (float): Total memory in gigabytes (rounded to 2 decimals).
+                    - free_memory_gb (float): Free memory in gigabytes (rounded to 2 decimals).
+                    - used_memory_gb (float): Used memory in gigabytes (rounded to 2 decimals).
+                    - compute_capability (str): Compute capability formatted as "major.minor".
+        """
         gpu_list = self.get_gpu_info() if self.has_gpu else []
         if isinstance(gpu_list, GPUInfo):
             gpu_list = [gpu_list]
