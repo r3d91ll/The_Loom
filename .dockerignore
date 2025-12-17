@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+.eggs
+dist
+build
+.venv
+venv
+.env
+
+# Poetry
+.poetry
+
+# Testing
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+*.cover
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Documentation
+docs
+*.md
+!README.md
+
+# Local development
+*.log
+*.tmp
+.DS_Store
+
+# Model cache (mounted as volume)
+.cache
+models
+
+# Tests (not needed in production image)
+tests
