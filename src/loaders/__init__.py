@@ -2,6 +2,8 @@
 
 from .base import EmbeddingOutput, GenerationOutput, LoadedModel, ModelLoader
 from .custom_loader import CustomLoader, CustomModelConfig, register_custom_model
+from .mistral_loader import MistralLoader
+from .qwen_loader import QwenLoader
 from .registry import (
     LoaderRegistry,
     create_registry_from_config,
@@ -20,6 +22,8 @@ __all__ = [
     # Loaders
     "TransformersLoader",
     "SentenceTransformersLoader",
+    "MistralLoader",
+    "QwenLoader",
     "CustomLoader",
     "CustomModelConfig",
     "register_custom_model",

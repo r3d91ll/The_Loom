@@ -40,8 +40,11 @@ class GenerationOutput:
 
     text: str
     token_ids: list[int]
-    hidden_states: dict[int, torch.Tensor] | None = None  # layer_idx -> tensor
+    hidden_states: dict[int, torch.Tensor] | None = None  # layer_idx -> tensor [hidden_size]
     attention_weights: dict[int, torch.Tensor] | None = None  # layer_idx -> tensor
+    # Full sequence hidden states for manifold construction
+    # Shape: layer_idx -> tensor [num_tokens, hidden_size]
+    sequence_hidden_states: dict[int, torch.Tensor] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

@@ -173,7 +173,7 @@ class CustomLoader(ModelLoader):
         Returns:
             `True` if a matching custom configuration is registered for `model_id`, `False` otherwise.
         """
-        return model_id in self.configs
+        return self.get_config(model_id) is not None
 
     def get_config(self, model_id: str) -> CustomModelConfig | None:
         """
@@ -467,12 +467,9 @@ class CustomLoader(ModelLoader):
 
         # Check if model supports generation
         if not hasattr(model, "generate"):
-            return GenerationOutput(
-                text="[CustomLoader: Model does not support generate()]",
-                token_ids=[],
-                hidden_states=None,
-                attention_weights=None,
-                metadata={"error": "no_generate_method"},
+            raise NotImplementedError(
+                f"Model {loaded_model.model_id} does not support text generation "
+                "(no generate() method). Use embed() for embedding extraction instead."
             )
 
         gen_kwargs = {
@@ -492,13 +489,9 @@ class CustomLoader(ModelLoader):
             try:
                 outputs = model.generate(**inputs, **gen_kwargs)  # type: ignore[operator]
             except Exception as e:
-                return GenerationOutput(
-                    text=f"[CustomLoader: Generation failed: {e}]",
-                    token_ids=[],
-                    hidden_states=None,
-                    attention_weights=None,
-                    metadata={"error": str(e)},
-                )
+                raise RuntimeError(
+                    f"Generation failed for model {loaded_model.model_id}: {e}"
+                ) from e
 
         inference_time = time.time() - start_time
 
@@ -628,7 +621,8 @@ class CustomLoader(ModelLoader):
             embedding = last_hidden[torch.arange(batch_size, device=device), seq_lengths]
         elif pooling == "mean":
             attention_mask = inputs.attention_mask.unsqueeze(-1)
-            embedding = (last_hidden * attention_mask).sum(dim=1) / attention_mask.sum(dim=1)
+            mask_sum = attention_mask.sum(dim=1).clamp(min=1)  # Avoid division by zero
+            embedding = (last_hidden * attention_mask).sum(dim=1) / mask_sum
         elif pooling == "first_token":
             embedding = last_hidden[:, 0, :]
         else:

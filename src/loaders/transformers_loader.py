@@ -166,16 +166,28 @@ class TransformersLoader(ModelLoader):
         num_layers = getattr(config, "num_hidden_layers", getattr(config, "n_layer", 32))
 
         load_time = time.time() - start_time
+
+        # Determine actual device after loading (device_map="auto" may distribute model)
+        device_map = getattr(model, "hf_device_map", None)
+        if device_map and isinstance(device_map, dict):
+            # Model is distributed; use first device as primary
+            first_device = next(iter(device_map.values()))
+            actual_device = torch.device(first_device)
+            logger.debug(f"Model distributed across devices: {device_map}")
+        else:
+            actual_device = torch_device
+
         logger.info(
             f"Model loaded in {load_time:.2f}s - "
-            f"hidden_size={hidden_size}, num_layers={num_layers}, quant={quant_info}"
+            f"hidden_size={hidden_size}, num_layers={num_layers}, "
+            f"quant={quant_info}, device={actual_device}"
         )
 
         return LoadedModel(
             model=model,
             tokenizer=tokenizer,
             model_id=model_id,
-            device=torch_device,
+            device=actual_device,
             dtype=torch_dtype,
             hidden_size=hidden_size,
             num_layers=num_layers,
@@ -185,6 +197,7 @@ class TransformersLoader(ModelLoader):
                 "trust_remote_code": trust_remote_code,
                 "model_type": getattr(config, "model_type", "unknown"),
                 "quantization": quant_info,
+                "device_map": getattr(model, "hf_device_map", None),
             },
         )
 
@@ -242,25 +255,31 @@ class TransformersLoader(ModelLoader):
         return_hidden_states: bool = True,
         hidden_state_layers: list[int] | None = None,
         return_attention: bool = False,
+        return_full_sequence: bool = False,
         top_p: float = 0.9,
         do_sample: bool = True,
         **kwargs: Any,
     ) -> GenerationOutput:
-        """
-        Generate text from a loaded decoder-only Transformer model and optionally return per-layer hidden states and attention weights for the final generated token.
-        
-        Parameters:
-            loaded_model: LoadedModel containing the model, tokenizer, and metadata.
-            prompt: Input prompt string to condition generation.
-            max_tokens: Maximum number of new tokens to generate.
-            temperature: Sampling temperature; 0 (or do_sample=False) results in greedy decoding.
-            return_hidden_states: If True, include hidden-state vectors for requested layers.
-            hidden_state_layers: List of layer indices to extract from the final generation step; negative indices (e.g., -1) are allowed. If None, defaults to the last layer only.
-            return_attention: If True, include attention weights for requested layers.
-            top_p: Nucleus sampling probability for top-p sampling.
-            do_sample: Whether to sample (True) or use deterministic decoding (False).
-            **kwargs: Additional generation keyword arguments forwarded to the model's generate method.
-        
+        """Generate text with hidden state extraction.
+
+        This is the core research capability - extracting the geometric
+        representation of meaning before it becomes text.
+
+        Args:
+            loaded_model: Previously loaded model
+            prompt: Input text
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature (0 = greedy)
+            return_hidden_states: Extract hidden states
+            hidden_state_layers: Which layers (-1 = last, None = all requested)
+            return_attention: Extract attention weights
+            return_full_sequence: Return hidden states for ALL generated tokens,
+                not just the last. Creates a [num_tokens, hidden_size] tensor
+                that represents the manifold/boundary object geometry.
+            top_p: Nucleus sampling probability
+            do_sample: Use sampling vs greedy decoding
+            **kwargs: Additional generation args
+
         Returns:
             GenerationOutput: Object containing:
               - text: The decoded generated text (excluding the prompt).
@@ -313,12 +332,23 @@ class TransformersLoader(ModelLoader):
 
         # Extract hidden states if requested
         hidden_states_dict: dict[int, torch.Tensor] | None = None
+        sequence_hidden_states_dict: dict[int, torch.Tensor] | None = None
+
         if return_hidden_states and hasattr(outputs, "hidden_states"):
+            # Always extract last token's hidden state
             hidden_states_dict = self._extract_hidden_states(
                 outputs.hidden_states,
                 hidden_state_layers,
                 loaded_model.num_layers,
             )
+
+            # Optionally extract full sequence for manifold construction
+            if return_full_sequence:
+                sequence_hidden_states_dict = self._extract_sequence_hidden_states(
+                    outputs.hidden_states,
+                    hidden_state_layers,
+                    loaded_model.num_layers,
+                )
 
         # Extract attention if requested
         attention_dict: dict[int, torch.Tensor] | None = None
@@ -334,6 +364,7 @@ class TransformersLoader(ModelLoader):
             token_ids=generated_ids,
             hidden_states=hidden_states_dict,
             attention_weights=attention_dict,
+            sequence_hidden_states=sequence_hidden_states_dict,
             metadata={
                 "inference_time_ms": inference_time * 1000,
                 "tokens_generated": len(generated_ids),
@@ -343,6 +374,7 @@ class TransformersLoader(ModelLoader):
                 "input_tokens": input_length,
                 "temperature": temperature,
                 "model_id": loaded_model.model_id,
+                "full_sequence": return_full_sequence,
             },
         )
 
@@ -423,6 +455,54 @@ class TransformersLoader(ModelLoader):
 
         return result
 
+    def _extract_sequence_hidden_states(
+        self,
+        hidden_states: tuple,
+        layers: list[int],
+        num_layers: int,
+    ) -> dict[int, torch.Tensor]:
+        """Extract hidden states for ALL generated tokens (manifold construction).
+
+        This creates the full geometric representation of the generation -
+        each token's position in the model's semantic space, forming the
+        "boundary object" manifold.
+
+        The hidden_states tuple from generate() is structured as:
+        - Tuple of generation steps (one per token generated)
+        - Each step has tuple of (num_layers + 1) tensors
+        - Each tensor is [batch, seq_len, hidden_size]
+
+        We extract the last token position from each step, giving us
+        the newly generated token's representation at each step.
+
+        Returns:
+            dict mapping layer_idx to tensor of shape [num_tokens, hidden_size]
+        """
+        result: dict[int, torch.Tensor] = {}
+
+        if not hidden_states:
+            return result
+
+        for layer_idx in layers:
+            # Convert negative indices
+            actual_idx = layer_idx if layer_idx >= 0 else num_layers + 1 + layer_idx
+
+            # Collect hidden state for each generation step
+            step_vectors = []
+            for step in hidden_states:
+                if 0 <= actual_idx < len(step):
+                    # Get last token's hidden state for this step
+                    # Shape: [batch, seq_len, hidden] -> [hidden]
+                    token_hidden = step[actual_idx][0, -1, :].cpu()
+                    step_vectors.append(token_hidden)
+
+            if step_vectors:
+                # Stack into [num_tokens, hidden_size] matrix
+                sequence_tensor = torch.stack(step_vectors, dim=0)
+                result[layer_idx] = sequence_tensor
+
+        return result
+
     def embed(
         self,
         loaded_model: LoadedModel,
@@ -483,7 +563,8 @@ class TransformersLoader(ModelLoader):
             embedding = last_hidden[torch.arange(batch_size, device=device), seq_lengths]
         elif pooling == "mean":
             attention_mask = inputs.attention_mask.unsqueeze(-1)
-            embedding = (last_hidden * attention_mask).sum(dim=1) / attention_mask.sum(dim=1)
+            mask_sum = attention_mask.sum(dim=1).clamp(min=1)  # Avoid division by zero
+            embedding = (last_hidden * attention_mask).sum(dim=1) / mask_sum
         elif pooling == "first_token":
             embedding = last_hidden[:, 0, :]
         else:

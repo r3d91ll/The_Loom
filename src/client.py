@@ -193,7 +193,9 @@ class LoomClient:
         Returns:
         	selection_info (dict[str, Any]): Server response describing loader selection and related metadata.
         """
-        response = self.client.get(f"/loaders/probe/{model_id}")
+        # Replace / with -- for URL safety
+        safe_id = model_id.replace("/", "--")
+        response = self.client.get(f"/loaders/probe/{safe_id}")
         response.raise_for_status()
         return cast(dict[str, Any], response.json())
 
@@ -266,19 +268,30 @@ class LoomClient:
         return_hidden_states: bool = True,
         hidden_state_layers: list[int] | None = None,
         hidden_state_format: str = "list",
+        return_full_sequence: bool = False,
         loader: str | None = None,
     ) -> dict[str, Any]:
-        """
-        Generate text from a model and optionally return its hidden states.
-        
-        Parameters:
-            return_hidden_states (bool): If True, include hidden state data in the response.
-            hidden_state_layers (list[int] | None): List of layer indices to return (use -1 for the last layer).
-            hidden_state_format (str): Output format for hidden states; commonly "list" or "base64".
-            loader (str | None): If provided, force a specific model loader implementation.
-        
+        """Generate text with optional hidden state extraction.
+
+        This is the core research endpoint - returns the geometric
+        representation (hidden state) alongside the generated text.
+
+        Args:
+            model: Model ID
+            prompt: Input prompt text
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature
+            top_p: Nucleus sampling probability
+            return_hidden_states: Whether to return hidden states
+            hidden_state_layers: Which layers to return (-1 = last)
+            hidden_state_format: Format for hidden states (list or base64)
+            return_full_sequence: Return hidden states for ALL tokens (manifold).
+                Creates [num_tokens, hidden_size] tensor for geometric analysis.
+            loader: Force specific loader
+
         Returns:
-            dict[str, Any]: A dictionary containing the generation result, including `text`, `token_count`, `token_ids`, and, if requested, `hidden_states` and `metadata`.
+            Generation output with text, token_count, hidden_states,
+            sequence_hidden_states (if return_full_sequence), metadata
         """
         payload = {
             "model": model,
@@ -288,6 +301,7 @@ class LoomClient:
             "top_p": top_p,
             "return_hidden_states": return_hidden_states,
             "hidden_state_format": hidden_state_format,
+            "return_full_sequence": return_full_sequence,
         }
         if hidden_state_layers is not None:
             payload["hidden_state_layers"] = hidden_state_layers

@@ -1,0 +1,63 @@
+# The Loom - Docker Compose for local development and testing
+#
+# Quick start:
+#   docker compose up --build
+#
+# With specific GPU:
+#   CUDA_VISIBLE_DEVICES=0 docker compose up --build
+#
+# With persistent model cache:
+#   docker compose up --build -v
+
+services:
+  loom:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: the-loom:latest
+    container_name: loom
+
+    # GPU access - requires nvidia-docker2
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1  # Use 1 GPU (change to 'all' for multi-GPU)
+              capabilities: [gpu]
+
+    ports:
+      - "8080:8080"
+
+    environment:
+      - LOOM_HOST=0.0.0.0
+      - LOOM_PORT=8080
+      - LOOM_LOG_LEVEL=INFO
+      - LOOM_MAX_MODELS=2
+      - LOOM_DEFAULT_DEVICE=cuda:0
+      - LOOM_MEMORY_FRACTION=0.85
+      # HuggingFace token (optional, for gated models)
+      - HF_TOKEN=${HF_TOKEN:-}
+      # Limit to specific GPU if needed
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+
+    volumes:
+      # Persistent model cache - avoids re-downloading models
+      - hf-cache:/app/.cache/huggingface
+      # Optional: mount local config
+      # - ./config:/app/config:ro
+
+    # Health check (use $$ to escape $ in docker-compose)
+    healthcheck:
+      test: ["CMD", "sh", "-c", "curl -f http://localhost:$${LOOM_PORT}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # Restart policy
+    restart: unless-stopped
+
+volumes:
+  hf-cache:
+    name: loom-hf-cache

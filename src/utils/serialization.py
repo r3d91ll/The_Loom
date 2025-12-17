@@ -22,6 +22,9 @@ def tensor_to_list(tensor: torch.Tensor | np.ndarray) -> list[float]:
         Flattened list of floats
     """
     if isinstance(tensor, torch.Tensor):
+        # Convert bfloat16 to float32 first since numpy doesn't support bf16
+        if tensor.dtype == torch.bfloat16:
+            tensor = tensor.float()
         result: list[float] = tensor.cpu().detach().numpy().flatten().tolist()
         return result
     result_np: list[float] = np.asarray(tensor).flatten().tolist()
@@ -40,6 +43,9 @@ def tensor_to_base64(tensor: torch.Tensor | np.ndarray, dtype: str = "float32") 
         str: Base64-encoded ASCII string containing the array's raw bytes after casting to `dtype`.
     """
     if isinstance(tensor, torch.Tensor):
+        # Convert bfloat16 to float32 first since numpy doesn't support bf16
+        if tensor.dtype == torch.bfloat16:
+            tensor = tensor.float()
         arr = tensor.cpu().detach().numpy()
     else:
         arr = np.asarray(tensor)
@@ -104,9 +110,14 @@ def serialize_hidden_states(
             shape = state.shape
             dtype = state.dtype
         elif isinstance(state, torch.Tensor):
-            vector = state.cpu().detach().numpy()
+            # Convert bfloat16 to float32 first since numpy doesn't support bf16
+            if state.dtype == torch.bfloat16:
+                vector = state.cpu().detach().float().numpy()
+                dtype = "float32"
+            else:
+                vector = state.cpu().detach().numpy()
+                dtype = str(state.dtype).replace("torch.", "")
             shape = tuple(vector.shape)
-            dtype = str(state.dtype).replace("torch.", "")
         else:
             vector = np.asarray(state)
             shape = tuple(vector.shape)
