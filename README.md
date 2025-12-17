@@ -234,6 +234,51 @@ response = client.post("/generate", json={
 
 > **Note:** Unix socket transport is only available for local/source installs. Docker deployments use HTTP.
 
+## Model Loading
+
+Unlike vLLM which requires declaring a model at startup, The Loom supports **both** approaches:
+
+### Preload at Startup (vLLM-style)
+
+```bash
+# CLI: Preload specific model(s) before accepting requests
+poetry run loom --preload meta-llama/Llama-3.1-8B-Instruct
+
+# Multiple models
+poetry run loom --preload mistralai/Mistral-7B-Instruct-v0.3 --preload BAAI/bge-small-en-v1.5
+
+# Docker: Override CMD to preload
+docker run -d --gpus all -p 8080:8080 \
+  -v ~/.cache/huggingface:/app/.cache/huggingface \
+  tbucy/loom:latest \
+  sh -c "python -m src.server --preload meta-llama/Llama-3.1-8B-Instruct"
+```
+
+### Lazy Load on Demand (Default)
+
+Models are loaded automatically on first request. This is useful for:
+- Multi-model workflows where you don't know which models you'll need
+- Memory-constrained environments (only load what you use)
+- Development and experimentation
+
+```bash
+# Start server with no models loaded
+poetry run loom --port 8080
+
+# First request to a model triggers loading
+curl -X POST http://localhost:8080/generate \
+  -d '{"model": "mistralai/Mistral-7B-Instruct-v0.3", "prompt": "Hello"}'
+```
+
+### LRU Model Eviction
+
+The Loom maintains up to `LOOM_MAX_MODELS` in memory (default: 3). When the limit is reached, the least-recently-used model is evicted to make room for new ones.
+
+```bash
+# Allow more models in memory
+LOOM_MAX_MODELS=5 poetry run loom
+```
+
 ## Configuration
 
 Environment variables:
