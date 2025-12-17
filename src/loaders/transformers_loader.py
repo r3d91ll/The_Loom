@@ -522,7 +522,8 @@ class TransformersLoader(ModelLoader):
             embedding = last_hidden[torch.arange(batch_size, device=device), seq_lengths]
         elif pooling == "mean":
             attention_mask = inputs.attention_mask.unsqueeze(-1)
-            embedding = (last_hidden * attention_mask).sum(dim=1) / attention_mask.sum(dim=1)
+            mask_sum = attention_mask.sum(dim=1).clamp(min=1)  # Avoid division by zero
+            embedding = (last_hidden * attention_mask).sum(dim=1) / mask_sum
         elif pooling == "first_token":
             embedding = last_hidden[:, 0, :]
         else:
