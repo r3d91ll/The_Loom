@@ -29,8 +29,8 @@ accelerate = "^1.12.0"
 kernels = "^0.11.4"
 mistral-common = {version = ">=1.8.6", python = ">=3.10,<3.14"}
 triton = ">=3.4.0"
-protobuf = ">=3.20.0,<4.0.0"
-sentencepiece = "^0.1.99"
+protobuf = ">=6.31.1"
+sentencepiece = ">=0.1.99"
 
 [tool.poetry.extras]
 metrics = ["prometheus-client"]

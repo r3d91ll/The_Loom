@@ -187,8 +187,8 @@ services:
 ### From Source
 
 ```bash
-git clone https://github.com/r3d91ll/TheLoom.git
-cd TheLoom/the-loom
+git clone https://github.com/r3d91ll/The_Loom.git
+cd The_Loom
 poetry install
 poetry run loom --port 8080
 ```

@@ -25,8 +25,8 @@ WORKDIR /app
 # Copy dependency files first (better layer caching)
 COPY pyproject.toml poetry.lock ./
 
-# Export dependencies to requirements.txt (faster than poetry install in runtime)
-RUN poetry export -f requirements.txt --without-hashes --with dev -o requirements.txt
+# Export only production dependencies
+RUN poetry export -f requirements.txt --without-hashes -o requirements.txt
 
 # =============================================================================
 # Stage 2: Runtime - CUDA-enabled image
