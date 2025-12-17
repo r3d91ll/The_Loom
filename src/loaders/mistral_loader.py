@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import torch
 from transformers import AutoModelForCausalLM
@@ -75,14 +75,19 @@ class MistralTokenizerWrapper:
         self._bos_token_id: int | None = self._tekken.bos_id
 
     @property
-    def pad_token(self) -> str | None:
+    def pad_token(self) -> str:
         """Return pad token string."""
         return "<pad>"
 
     @property
-    def eos_token(self) -> str | None:
+    def eos_token(self) -> str:
         """Return EOS token string."""
         return "</s>"
+
+    @property
+    def bos_token(self) -> str:
+        """Return BOS token string."""
+        return "<s>"
 
     @property
     def pad_token_id(self) -> int | None:
@@ -93,6 +98,11 @@ class MistralTokenizerWrapper:
     def eos_token_id(self) -> int | None:
         """Return EOS token ID."""
         return self._eos_token_id
+
+    @property
+    def bos_token_id(self) -> int | None:
+        """Return BOS token ID."""
+        return self._bos_token_id
 
     def __call__(
         self,
@@ -212,7 +222,7 @@ class MistralLoader(ModelLoader):
     """
 
     # Patterns that indicate a model needs the Mistral loader
-    MISTRAL_PATTERNS = [
+    MISTRAL_PATTERNS: ClassVar[list[str]] = [
         "mistralai/devstral",
         "mistralai/ministral",
         "mistralai/mistral-small",
@@ -220,7 +230,7 @@ class MistralLoader(ModelLoader):
     ]
 
     # Models that should NOT use this loader (use standard transformers)
-    EXCLUDE_PATTERNS = [
+    EXCLUDE_PATTERNS: ClassVar[list[str]] = [
         "mistralai/mistral-7b",
         "mistralai/mixtral",
     ]
