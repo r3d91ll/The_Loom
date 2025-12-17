@@ -32,9 +32,62 @@ from ..utils.metrics import (
     record_request,
     set_models_loaded,
 )
-from ..utils.serialization import serialize_hidden_states, tensor_to_list
+from ..utils.serialization import serialize_hidden_states, tensor_to_base64, tensor_to_list
 
 logger = logging.getLogger(__name__)
+
+
+def _serialize_sequence_hidden_states(
+    sequence_hidden_states: dict[int, Any],
+    format: str = "list",
+) -> dict[str, dict[str, Any]]:
+    """Serialize full sequence hidden states for manifold analysis.
+
+    Args:
+        sequence_hidden_states: dict mapping layer_idx to tensor [num_tokens, hidden_size]
+        format: "list" or "base64"
+
+    Returns:
+        JSON-serializable dict with sequence data
+    """
+    import torch
+
+    result: dict[str, dict[str, Any]] = {}
+
+    for layer_idx, tensor in sequence_hidden_states.items():
+        layer_key = str(layer_idx)
+
+        # Handle bfloat16 conversion
+        if hasattr(tensor, "dtype") and tensor.dtype == torch.bfloat16:
+            tensor = tensor.float()
+
+        if hasattr(tensor, "cpu"):
+            arr = tensor.cpu().detach().numpy()
+        else:
+            import numpy as np
+            arr = np.asarray(tensor)
+
+        shape = list(arr.shape)
+        dtype = "float32"
+
+        if format == "list":
+            # Return as nested list [num_tokens][hidden_size]
+            result[layer_key] = {
+                "data": arr.tolist(),
+                "shape": shape,
+                "dtype": dtype,
+            }
+        elif format == "base64":
+            result[layer_key] = {
+                "data": tensor_to_base64(tensor, "float32"),
+                "shape": shape,
+                "dtype": dtype,
+                "encoding": "base64",
+            }
+        else:
+            raise ValueError(f"Unknown format: {format}")
+
+    return result
 
 
 # ============================================================================
@@ -55,6 +108,11 @@ class GenerateRequest(BaseModel):
         default=[-1], description="Which layers to return (-1 = last)"
     )
     return_attention: bool = Field(default=False, description="Return attention weights")
+    return_full_sequence: bool = Field(
+        default=False,
+        description="Return hidden states for ALL tokens (manifold/boundary object). "
+        "Creates [num_tokens, hidden_size] tensor for geometric analysis.",
+    )
     hidden_state_format: str = Field(
         default="list", description="Format for hidden states: list or base64"
     )
@@ -73,6 +131,15 @@ class HiddenStateResponse(BaseModel):
     encoding: str | None = None  # 'base64' if base64 encoded
 
 
+class SequenceHiddenStateResponse(BaseModel):
+    """Full sequence hidden states for manifold construction."""
+
+    data: list[list[float]] | str  # [num_tokens, hidden_size] or base64
+    shape: list[int]  # [num_tokens, hidden_size]
+    dtype: str
+    encoding: str | None = None
+
+
 class GenerateResponse(BaseModel):
     """Response model for text generation."""
 
@@ -80,6 +147,8 @@ class GenerateResponse(BaseModel):
     token_count: int
     hidden_states: dict[str, HiddenStateResponse] | None = None
     attention_weights: dict[str, Any] | None = None
+    # Full sequence hidden states for manifold/boundary object analysis
+    sequence_hidden_states: dict[str, SequenceHiddenStateResponse] | None = None
     metadata: dict[str, Any]
 
 
@@ -546,6 +615,7 @@ def create_http_app(config: Config | None = None) -> FastAPI:
                 return_hidden_states=request.return_hidden_states,
                 hidden_state_layers=request.hidden_state_layers,
                 return_attention=request.return_attention,
+                return_full_sequence=request.return_full_sequence,
             )
 
             # Record generation metrics
@@ -573,11 +643,20 @@ def create_http_app(config: Config | None = None) -> FastAPI:
                     format=request.hidden_state_format,
                 )
 
+            # Serialize full sequence hidden states for manifold analysis
+            sequence_hidden_states_response = None
+            if output.sequence_hidden_states:
+                sequence_hidden_states_response = _serialize_sequence_hidden_states(
+                    output.sequence_hidden_states,
+                    format=request.hidden_state_format,
+                )
+
             return GenerateResponse(
                 text=output.text,
                 token_count=len(output.token_ids),
                 hidden_states=hidden_states_response,
                 attention_weights=attention_response,
+                sequence_hidden_states=sequence_hidden_states_response,
                 metadata=output.metadata,
             )
 

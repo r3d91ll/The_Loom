@@ -226,6 +226,7 @@ class TransformersLoader(ModelLoader):
         return_hidden_states: bool = True,
         hidden_state_layers: list[int] | None = None,
         return_attention: bool = False,
+        return_full_sequence: bool = False,
         top_p: float = 0.9,
         do_sample: bool = True,
         **kwargs: Any,
@@ -243,6 +244,9 @@ class TransformersLoader(ModelLoader):
             return_hidden_states: Extract hidden states
             hidden_state_layers: Which layers (-1 = last, None = all requested)
             return_attention: Extract attention weights
+            return_full_sequence: Return hidden states for ALL generated tokens,
+                not just the last. Creates a [num_tokens, hidden_size] tensor
+                that represents the manifold/boundary object geometry.
             top_p: Nucleus sampling probability
             do_sample: Use sampling vs greedy decoding
             **kwargs: Additional generation args
@@ -294,12 +298,23 @@ class TransformersLoader(ModelLoader):
 
         # Extract hidden states if requested
         hidden_states_dict: dict[int, torch.Tensor] | None = None
+        sequence_hidden_states_dict: dict[int, torch.Tensor] | None = None
+
         if return_hidden_states and hasattr(outputs, "hidden_states"):
+            # Always extract last token's hidden state
             hidden_states_dict = self._extract_hidden_states(
                 outputs.hidden_states,
                 hidden_state_layers,
                 loaded_model.num_layers,
             )
+
+            # Optionally extract full sequence for manifold construction
+            if return_full_sequence:
+                sequence_hidden_states_dict = self._extract_sequence_hidden_states(
+                    outputs.hidden_states,
+                    hidden_state_layers,
+                    loaded_model.num_layers,
+                )
 
         # Extract attention if requested
         attention_dict: dict[int, torch.Tensor] | None = None
@@ -315,6 +330,7 @@ class TransformersLoader(ModelLoader):
             token_ids=generated_ids,
             hidden_states=hidden_states_dict,
             attention_weights=attention_dict,
+            sequence_hidden_states=sequence_hidden_states_dict,
             metadata={
                 "inference_time_ms": inference_time * 1000,
                 "tokens_generated": len(generated_ids),
@@ -324,6 +340,7 @@ class TransformersLoader(ModelLoader):
                 "input_tokens": input_length,
                 "temperature": temperature,
                 "model_id": loaded_model.model_id,
+                "full_sequence": return_full_sequence,
             },
         )
 
@@ -387,6 +404,54 @@ class TransformersLoader(ModelLoader):
                 # Shape: [batch, heads, seq, seq] -> keep last query position
                 layer_attn = final_step[actual_idx][:, :, -1, :].cpu()
                 result[layer_idx] = layer_attn
+
+        return result
+
+    def _extract_sequence_hidden_states(
+        self,
+        hidden_states: tuple,
+        layers: list[int],
+        num_layers: int,
+    ) -> dict[int, torch.Tensor]:
+        """Extract hidden states for ALL generated tokens (manifold construction).
+
+        This creates the full geometric representation of the generation -
+        each token's position in the model's semantic space, forming the
+        "boundary object" manifold.
+
+        The hidden_states tuple from generate() is structured as:
+        - Tuple of generation steps (one per token generated)
+        - Each step has tuple of (num_layers + 1) tensors
+        - Each tensor is [batch, seq_len, hidden_size]
+
+        We extract the last token position from each step, giving us
+        the newly generated token's representation at each step.
+
+        Returns:
+            dict mapping layer_idx to tensor of shape [num_tokens, hidden_size]
+        """
+        result: dict[int, torch.Tensor] = {}
+
+        if not hidden_states:
+            return result
+
+        for layer_idx in layers:
+            # Convert negative indices
+            actual_idx = layer_idx if layer_idx >= 0 else num_layers + 1 + layer_idx
+
+            # Collect hidden state for each generation step
+            step_vectors = []
+            for step in hidden_states:
+                if 0 <= actual_idx < len(step):
+                    # Get last token's hidden state for this step
+                    # Shape: [batch, seq_len, hidden] -> [hidden]
+                    token_hidden = step[actual_idx][0, -1, :].cpu()
+                    step_vectors.append(token_hidden)
+
+            if step_vectors:
+                # Stack into [num_tokens, hidden_size] matrix
+                sequence_tensor = torch.stack(step_vectors, dim=0)
+                result[layer_idx] = sequence_tensor
 
         return result
 

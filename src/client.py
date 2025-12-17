@@ -223,6 +223,7 @@ class LoomClient:
         return_hidden_states: bool = True,
         hidden_state_layers: list[int] | None = None,
         hidden_state_format: str = "list",
+        return_full_sequence: bool = False,
         loader: str | None = None,
     ) -> dict[str, Any]:
         """Generate text with optional hidden state extraction.
@@ -239,10 +240,13 @@ class LoomClient:
             return_hidden_states: Whether to return hidden states
             hidden_state_layers: Which layers to return (-1 = last)
             hidden_state_format: Format for hidden states (list or base64)
+            return_full_sequence: Return hidden states for ALL tokens (manifold).
+                Creates [num_tokens, hidden_size] tensor for geometric analysis.
             loader: Force specific loader
 
         Returns:
-            Generation output with text, token_count, hidden_states, metadata
+            Generation output with text, token_count, hidden_states,
+            sequence_hidden_states (if return_full_sequence), metadata
         """
         payload = {
             "model": model,
@@ -252,6 +256,7 @@ class LoomClient:
             "top_p": top_p,
             "return_hidden_states": return_hidden_states,
             "hidden_state_format": hidden_state_format,
+            "return_full_sequence": return_full_sequence,
         }
         if hidden_state_layers is not None:
             payload["hidden_state_layers"] = hidden_state_layers
