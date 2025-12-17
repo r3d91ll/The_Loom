@@ -173,16 +173,23 @@ class MistralTokenizerWrapper:
         Args:
             token_ids: Token IDs to decode
             skip_special_tokens: Whether to skip special tokens
-            **kwargs: Additional arguments (ignored)
+            **kwargs: Additional arguments passed to underlying decode
 
         Returns:
             Decoded text string
         """
+        from mistral_common.tokens.tokenizers.tekken import SpecialTokenPolicy
+
         if isinstance(token_ids, torch.Tensor):
             token_ids = token_ids.tolist()
 
+        # Map skip_special_tokens to SpecialTokenPolicy
+        decode_kwargs: dict[str, Any] = {**kwargs}
+        if skip_special_tokens:
+            decode_kwargs["special_token_policy"] = SpecialTokenPolicy.IGNORE
+
         # Use the underlying tekken tokenizer for decoding
-        return self._tekken.decode(token_ids)
+        return self._tekken.decode(token_ids, **decode_kwargs)
 
     def to(self, device: torch.device | str) -> MistralTokenizerWrapper:
         """No-op for device placement (tokenizers don't need GPU)."""
