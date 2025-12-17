@@ -137,6 +137,8 @@ class TestLoaderRegistry:
     def test_init_default_loaders(self):
         registry = LoaderRegistry()
 
+        assert "mistral" in registry.loaders
+        assert "qwen" in registry.loaders
         assert "transformers" in registry.loaders
         assert "sentence_transformers" in registry.loaders
         assert "custom" in registry.loaders
@@ -145,6 +147,8 @@ class TestLoaderRegistry:
         registry = LoaderRegistry()
 
         assert registry.fallback_order == [
+            "mistral",
+            "qwen",
             "transformers",
             "sentence_transformers",
             "custom",

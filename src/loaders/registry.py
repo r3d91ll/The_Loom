@@ -24,6 +24,8 @@ from .base import (
     StreamingToken,
 )
 from .custom_loader import CustomLoader, CustomModelConfig
+from .mistral_loader import MistralLoader
+from .qwen_loader import QwenLoader
 from .sentence_transformers_loader import SentenceTransformersLoader
 from .transformers_loader import TransformersLoader
 
@@ -61,13 +63,22 @@ class LoaderRegistry:
 
         # Initialize loaders in priority order
         self.loaders: dict[str, ModelLoader] = {
+            "mistral": MistralLoader(),
+            "qwen": QwenLoader(),
             "transformers": TransformersLoader(),
             "sentence_transformers": SentenceTransformersLoader(),
             "custom": CustomLoader(custom_model_configs),
         }
 
         # Fallback order for auto-detection
-        self.fallback_order = ["transformers", "sentence_transformers", "custom"]
+        # Specialized loaders checked first, then transformers as general fallback
+        self.fallback_order = [
+            "mistral",
+            "qwen",
+            "transformers",
+            "sentence_transformers",
+            "custom",
+        ]
 
         logger.info(
             f"LoaderRegistry initialized with {len(self.loaders)} loaders: "
