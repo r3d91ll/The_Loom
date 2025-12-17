@@ -129,7 +129,9 @@ class TestLoomClientClose:
         loom_client.close()  # Should not raise
 
     def test_context_manager(self):
-        """Test context manager calls close."""
+        """
+        Ensure LoomClient used as a context manager closes its underlying HTTP client on exit.
+        """
         with patch.object(httpx, "Client") as mock_client:
             mock_instance = MagicMock()
             mock_client.return_value = mock_instance

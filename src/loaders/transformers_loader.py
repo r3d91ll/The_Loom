@@ -42,13 +42,23 @@ class TransformersLoader(ModelLoader):
 
     @property
     def name(self) -> str:
+        """
+        Return the loader's identifier.
+        
+        Returns:
+            str: The loader name "transformers".
+        """
         return "transformers"
 
     def can_load(self, model_id: str) -> bool:
-        """Check if model can be loaded with transformers.
-
-        Most models work with transformers, so this returns True by default.
-        Specific exclusions can be added for models known to require other loaders.
+        """
+        Determine whether this loader should handle the given HuggingFace model identifier.
+        
+        Parameters:
+            model_id (str): The model repository identifier or name to check.
+        
+        Returns:
+            bool: `True` if the model is supported by this loader, `False` if the model id matches known embedding/sentence-transformer patterns that should be handled by other loaders.
         """
         model_lower = model_id.lower()
 
@@ -79,18 +89,19 @@ class TransformersLoader(ModelLoader):
         quantization: str | None = None,
         **kwargs: Any,
     ) -> LoadedModel:
-        """Load a model using HuggingFace Transformers.
-
-        Args:
-            model_id: HuggingFace model ID or local path
-            device: Device to load on (cuda:0, cpu, etc.)
-            dtype: Data type (auto, float16, bfloat16, float32)
-            trust_remote_code: Allow remote code execution for custom architectures
-            quantization: Quantization mode (None, "4bit", "8bit", "gptq", "awq")
-            **kwargs: Passed to AutoModelForCausalLM.from_pretrained
-
+        """
+        Load a decoder-only HuggingFace model and its tokenizer with optional quantization and hidden-state output enabled.
+        
+        Parameters:
+            model_id (str): HuggingFace model identifier or local checkpoint path.
+            device (str): Target device for model placement (e.g., "cuda:0" or "cpu").
+            dtype (str): Preferred data type resolution strategy ("auto", "float16", "bfloat16", "float32").
+            trust_remote_code (bool): Allow executing model code from the remote repository for custom architectures.
+            quantization (str | None): Quantization mode to apply when loading ("4bit", "8bit", "gptq", "awq", or None).
+            **kwargs: Additional keyword arguments forwarded to AutoModelForCausalLM.from_pretrained.
+        
         Returns:
-            LoadedModel with model, tokenizer, and metadata
+            LoadedModel: An object containing the loaded model and tokenizer plus metadata (device, dtype, hidden_size, num_layers, loader_type, and load metadata).
         """
         quant_info = quantization or "none"
         logger.info(f"Loading model {model_id} on {device} with dtype={dtype}, quant={quant_info}")
@@ -195,14 +206,19 @@ class TransformersLoader(ModelLoader):
         mode: str,
         compute_dtype: torch.dtype,
     ) -> dict[str, Any]:
-        """Get BitsAndBytes configuration for quantization.
-
-        Args:
-            mode: "4bit" or "8bit"
-            compute_dtype: Compute dtype for quantized operations
-
+        """
+        Builds a BitsAndBytesConfig appropriate for 4-bit or 8-bit quantization.
+        
+        Parameters:
+            mode (str): Quantization mode, either "4bit" or "8bit".
+            compute_dtype (torch.dtype): Dtype used for quantized compute (e.g., torch.float16).
+        
         Returns:
-            Dict with quantization_config for model loading
+            dict: A dictionary with key `"quantization_config"` whose value is a configured `BitsAndBytesConfig` for the requested mode.
+        
+        Raises:
+            ImportError: If the `bitsandbytes`/`transformers` BitsAndBytesConfig is not available.
+            ValueError: If `mode` is not "4bit" or "8bit".
         """
         try:
             from transformers import BitsAndBytesConfig
@@ -265,7 +281,12 @@ class TransformersLoader(ModelLoader):
             **kwargs: Additional generation args
 
         Returns:
-            GenerationOutput with text and optionally hidden states
+            GenerationOutput: Object containing:
+              - text: The decoded generated text (excluding the prompt).
+              - token_ids: List of generated token IDs (excluding the prompt).
+              - hidden_states: Optional dict mapping requested layer index -> Tensor of the final token's hidden vector for that layer.
+              - attention_weights: Optional dict mapping requested layer index -> Tensor of attention weights for the final token at that layer.
+              - metadata: Dict with inference metrics (inference_time_ms, tokens_generated, tokens_per_second), input token count, temperature, and model_id.
         """
         model = loaded_model.model
         tokenizer = loaded_model.tokenizer
@@ -363,15 +384,18 @@ class TransformersLoader(ModelLoader):
         layers: list[int],
         num_layers: int,
     ) -> dict[int, torch.Tensor]:
-        """Extract hidden states from generation output.
-
-        The hidden_states tuple from generate() is structured as:
-        - Tuple of generation steps
-        - Each step has tuple of (num_layers + 1) tensors (including embeddings)
-        - Each tensor is [batch, seq_len, hidden_size]
-
-        For the final hidden state (boundary object), we want the last token's
-        representation from the last layer at the final generation step.
+        """
+        Extract the last-token hidden-state vectors for specified layers from a generation output.
+        
+        hidden_states is expected to be a tuple of generation steps, where each step is a tuple of (num_layers + 1) tensors (including embeddings) shaped [batch, seq_len, hidden_size]. This function selects the final generation step and returns the hidden-state vector at the last sequence position for each requested layer.
+        
+        Parameters:
+            hidden_states (tuple): Generation output hidden states: tuple[step][layer] with tensors of shape [batch, seq_len, hidden_size].
+            layers (list[int]): List of layer indices to extract. Negative indices are supported and resolved relative to `num_layers + 1`.
+            num_layers (int): Number of model layers (used to resolve negative layer indices).
+        
+        Returns:
+            dict[int, torch.Tensor]: Mapping from each requested layer index (as provided in `layers`) to its extracted tensor of shape [batch, hidden_size] moved to CPU.
         """
         result: dict[int, torch.Tensor] = {}
 
@@ -401,7 +425,18 @@ class TransformersLoader(ModelLoader):
         layers: list[int],
         num_layers: int,
     ) -> dict[int, torch.Tensor]:
-        """Extract attention weights from generation output."""
+        """
+        Extract the attention weights for the requested layers from a generation output.
+        
+        If `attentions` is empty, returns an empty dict. Negative layer indices are interpreted
+        relative to `num_layers` (Python-style). For each requested layer that exists in the final
+        generation step, returns the attention scores for the last query position with shape
+        [batch, heads, seq].
+        
+        Returns:
+            dict[int, torch.Tensor]: Mapping from the requested layer index (as passed in `layers`)
+            to a tensor of attention weights of shape [batch, heads, seq].
+        """
         result: dict[int, torch.Tensor] = {}
 
         if not attentions:
@@ -475,21 +510,27 @@ class TransformersLoader(ModelLoader):
         pooling: str = "last_token",
         **kwargs: Any,
     ) -> EmbeddingOutput:
-        """Extract embedding from text using specified pooling.
-
-        For decoder-only models, the last token embedding is typically
-        the best representation (contains accumulated context).
-
-        Args:
-            loaded_model: Previously loaded model
-            text: Text to embed
-            pooling: Pooling strategy
-                - "last_token": Use last token's hidden state (recommended)
-                - "mean": Mean pool across all tokens
-                - "first_token": Use first token (CLS-style)
-
+        """
+        Compute an embedding for the given text using the provided loaded model and pooling strategy.
+        
+        The default "last_token" pooling is recommended for decoder-only models because the final token's hidden state accumulates context.
+        
+        Parameters:
+            loaded_model (LoadedModel): Loaded model container with `.model`, `.tokenizer`, `.device`, and `.model_id`.
+            text (str): Input text to embed.
+            pooling (str): Pooling strategy to reduce token-level hidden states to a single vector:
+                - "last_token": Use the last non-padding token's hidden state (recommended).
+                - "mean": Mean-pool hidden states across non-padding tokens.
+                - "first_token": Use the first token's hidden state.
+        
         Returns:
-            EmbeddingOutput with embedding tensor
+            EmbeddingOutput: Contains:
+                - embedding: CPU tensor of the resulting embedding (batch dimension removed for single input).
+                - shape: Shape of the embedding tensor.
+                - metadata: Dict with keys including "pooling", "inference_time_ms", "input_tokens", and "model_id".
+        
+        Raises:
+            ValueError: If an unknown pooling strategy is provided.
         """
         model = loaded_model.model
         tokenizer = loaded_model.tokenizer
@@ -554,23 +595,22 @@ class TransformersLoader(ModelLoader):
         do_sample: bool = True,
         **kwargs: Any,
     ) -> Iterator[StreamingToken | StreamingOutput]:
-        """Generate text with true streaming token output.
-
-        Uses TextIteratorStreamer for real-time token streaming.
-
-        Args:
-            loaded_model: Previously loaded model container
-            prompt: Input prompt text
-            max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature
-            return_hidden_states: Whether to return hidden states at end
-            hidden_state_layers: Which layers to return (-1 = last)
-            top_p: Nucleus sampling probability
-            do_sample: Use sampling vs greedy decoding
-            **kwargs: Additional generation arguments
-
+        """
+        Stream token-by-token generation from the model in real time.
+        
+        Parameters:
+            loaded_model (LoadedModel): Model container returned by load().
+            prompt (str): Input prompt to condition generation.
+            max_tokens (int): Maximum number of new tokens to generate.
+            temperature (float): Sampling temperature; has effect only when sampling.
+            return_hidden_states (bool): If true, extract hidden states from the final generation output.
+            hidden_state_layers (list[int] | None): Layer indices to extract (negative indices allowed; -1 = last). Defaults to [-1].
+            top_p (float): Nucleus sampling probability used when sampling.
+            do_sample (bool): Whether to use sampling (True) or deterministic decoding (False).
+            **kwargs: Additional generation kwargs passed to the model.generate call.
+        
         Yields:
-            StreamingToken for each token, then StreamingOutput at end
+            StreamingToken for each token produced during streaming; on normal completion yields a final StreamingToken with is_finished=True and then a StreamingOutput containing the full generated text, token ids, token count, optional hidden states (if requested), and metadata (inference time, tokens/sec, input token count, temperature, model_id, streaming=True). If streaming fails, yields a final error StreamingToken with finish_reason "error".
         """
         model = loaded_model.model
         tokenizer = loaded_model.tokenizer
@@ -618,6 +658,11 @@ class TransformersLoader(ModelLoader):
 
         # Run generation in background thread
         def generate_thread() -> None:
+            """
+            Run the model generation call in a background thread and store its result in the enclosing scope.
+            
+            Executes model.generate using the prepared `inputs` and `gen_kwargs` under torch.no_grad() and assigns the produced output to the nonlocal variable `generation_output`.
+            """
             nonlocal generation_output
             with torch.no_grad():
                 generation_output = model.generate(**inputs, **gen_kwargs)  # type: ignore[operator]
