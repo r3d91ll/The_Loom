@@ -66,6 +66,11 @@ Generate text with hidden state extraction.
 }
 ```
 
+**hidden_state_layers options:**
+- `[-1]` - Last layer only (default, semantic representation)
+- `[-1, -2, -3]` - Specific layers (negative indices from end)
+- `"all"` - Every layer in the model (for layer-wise analysis)
+
 **Response:**
 
 ```json
