@@ -435,8 +435,6 @@ class TransformersLoader(ModelLoader):
         if not hidden_states:
             return result
 
-        num_steps = len(hidden_states)
-
         for layer_idx in layers:
             # Convert negative indices
             actual_idx = layer_idx if layer_idx >= 0 else num_layers + 1 + layer_idx
