@@ -64,12 +64,23 @@ class SentenceTransformersLoader(ModelLoader):
 
     @property
     def name(self) -> str:
+        """
+        Loader identifier for the sentence-transformers backend.
+        
+        Returns:
+            The loader identifier "sentence_transformers".
+        """
         return "sentence_transformers"
 
     def can_load(self, model_id: str) -> bool:
-        """Check if this loader should handle the model.
-
-        Returns True for known sentence-transformer models and embedding models.
+        """
+        Determine whether this loader should handle the given model identifier.
+        
+        Parameters:
+            model_id (str): Model identifier or repository name to test.
+        
+        Returns:
+            bool: `True` if the identifier matches known sentence-transformer patterns and does not contain any excluded patterns, `False` otherwise.
         """
         model_lower = model_id.lower()
 
@@ -168,7 +179,12 @@ class SentenceTransformersLoader(ModelLoader):
         )
 
     def _estimate_num_layers(self, model: Any) -> int:
-        """Estimate number of transformer layers in the model."""
+        """
+        Attempt to determine the model's number of transformer layers by inspecting its internals; fall back to 12 if the value cannot be determined.
+        
+        Returns:
+            num_layers (int): Estimated number of transformer layers. Returns 12 when the estimate cannot be determined.
+        """
         try:
             # Try to access the underlying transformer
             if hasattr(model, "_first_module"):
@@ -195,13 +211,28 @@ class SentenceTransformersLoader(ModelLoader):
         return_attention: bool = False,
         **kwargs: Any,
     ) -> GenerationOutput:
-        """Generate text using sentence-transformer model.
-
-        Note: Sentence-transformers are primarily embedding models. This method
-        provides limited generation capability by encoding the prompt and
-        returning a placeholder response with the hidden states.
-
-        For actual text generation, use TransformersLoader instead.
+        """
+        Encode the prompt with the sentence-transformers model and return a generation-like result that contains embeddings rather than actual generated tokens.
+        
+        This loader does not perform autoregressive text generation; it encodes the prompt to produce embeddings and returns a placeholder text indicating generation is unsupported. If `return_hidden_states` is True, the returned `hidden_states` maps layer index -1 to the model's pooled embedding as a single-batch tensor on CPU.
+        
+        Parameters:
+            loaded_model (LoadedModel): Loaded sentence-transformers model container.
+            prompt (str): Input text to encode.
+            max_tokens (int): Ignored by this loader; present for API compatibility.
+            temperature (float): Ignored by this loader; present for API compatibility.
+            return_hidden_states (bool): If True, include `hidden_states` in the output.
+            hidden_state_layers (list[int] | None): Ignored for selection; when `return_hidden_states` is True the pooled embedding is returned under key -1.
+            return_attention (bool): Ignored; attention weights are not available from sentence-transformers.
+            **kwargs: Additional keyword arguments (ignored).
+        
+        Returns:
+            GenerationOutput: An object with:
+                - text: a placeholder message stating generation is unsupported.
+                - token_ids: an empty list.
+                - hidden_states: None or a dict mapping -1 to a tensor of shape [1, hidden_size] on CPU.
+                - attention_weights: None.
+                - metadata: dict containing `inference_time_ms`, `tokens_generated` (0), `tokens_per_second` (0), `model_id`, and a note "embedding_model_limited_generation".
         """
         model = loaded_model.model
 
@@ -316,20 +347,18 @@ class SentenceTransformersLoader(ModelLoader):
         normalize: bool = False,
         show_progress: bool = False,
     ) -> np.ndarray:
-        """Encode multiple texts efficiently.
-
-        This method leverages sentence-transformers' built-in batching
-        for efficient encoding of multiple texts.
-
-        Args:
-            loaded_model: Previously loaded model
-            texts: List of texts to encode
-            batch_size: Batch size for encoding
-            normalize: Whether to L2 normalize
-            show_progress: Show progress bar
-
+        """
+        Encode multiple input texts into sentence embeddings using the underlying sentence-transformers model.
+        
+        Parameters:
+            loaded_model (LoadedModel): Loaded SentenceTransformer model wrapper.
+            texts (list[str]): Texts to encode.
+            batch_size (int): Number of samples processed per batch.
+            normalize (bool): If true, L2-normalize each embedding.
+            show_progress (bool): If true, display a progress bar during encoding.
+        
         Returns:
-            Numpy array of shape [num_texts, embedding_dim]
+            np.ndarray: Array of shape [num_texts, embedding_dim] with the resulting embeddings.
         """
         model = loaded_model.model
 

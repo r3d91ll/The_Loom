@@ -30,7 +30,14 @@ from .transport.http import create_http_app
 
 
 def setup_logging(config: Config) -> None:
-    """Configure logging based on config."""
+    """
+    Configure the root logger and attach handlers according to the given configuration.
+    
+    Creates a console StreamHandler writing to stdout with the configured format. If a file path is specified, creates any missing parent directories and adds a FileHandler using the same format. Sets the root logger level from config.logging.level and attaches all created handlers. Lowers log levels for common third-party libraries (httpx, httpcore, urllib3, transformers) to reduce noise.
+    
+    Parameters:
+        config (Config): Configuration containing logging settings (e.g., `logging.format`, `logging.level`, and optional `logging.file`).
+    """
     log_config = config.logging
 
     # Set up handlers
@@ -63,7 +70,14 @@ def setup_logging(config: Config) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse command line arguments."""
+    """
+    Parse command-line arguments for the Loom server.
+    
+    Parses options for configuration file path, transport mode (http, unix, both), HTTP host and port, Unix socket path, models to preload, default CUDA device, logging level, and the auto-reload flag. The parser also provides example usage and documents environment-variable overrides in its epilog.
+    
+    Returns:
+        argparse.Namespace: Parsed CLI options with attributes such as `config`, `transport`, `host`, `port`, `unix_socket`, `preload`, `device`, `log_level`, and `reload`.
+    """
     parser = argparse.ArgumentParser(
         description="The Loom - Hidden state extraction for AI research (part of the Weaver ecosystem)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -165,7 +179,15 @@ async def run_http_server(
     port: int,
     log_level: str,
 ) -> None:
-    """Run HTTP server asynchronously."""
+    """
+    Start an HTTP server using Uvicorn to serve the given ASGI app on the specified host and port.
+    
+    Parameters:
+        app (Any): An ASGI application instance (for example, a FastAPI or Starlette app).
+        host (str): Network interface to bind the HTTP server to.
+        port (int): TCP port to listen on.
+        log_level (str): Logging level passed to Uvicorn (e.g., "info", "warning", "debug").
+    """
     config = uvicorn.Config(
         app,
         host=host,
@@ -181,7 +203,16 @@ async def run_unix_server(
     socket_path: str,
     log_level: str,
 ) -> None:
-    """Run Unix socket server asynchronously."""
+    """
+    Start a Uvicorn server bound to the given Unix domain socket.
+    
+    Removes an existing socket file at `socket_path` before binding and runs the server until it stops.
+    
+    Parameters:
+        app: ASGI application to serve.
+        socket_path (str): Filesystem path for the Unix domain socket to bind.
+        log_level (str): Uvicorn log level (e.g., "info", "warning", "error").
+    """
     # Remove existing socket file if present
     socket_file = Path(socket_path)
     if socket_file.exists():
@@ -203,7 +234,11 @@ async def run_both_servers(
     socket_path: str,
     log_level: str,
 ) -> None:
-    """Run both HTTP and Unix socket servers concurrently."""
+    """
+    Start HTTP and Unix socket servers concurrently and wait for both to finish.
+    
+    This function launches the HTTP server on the specified host and port and the Unix socket server at the specified socket_path, running them concurrently until both complete.
+    """
     logger = logging.getLogger(__name__)
     logger.info(f"Starting HTTP server on {host}:{port}")
     logger.info(f"Starting Unix socket server on {socket_path}")
@@ -215,7 +250,15 @@ async def run_both_servers(
 
 
 def preload_models(app: Any, model_ids: list[str]) -> None:
-    """Preload models into memory."""
+    """
+    Preload the specified models into the application's model manager.
+    
+    Preloads each model identified in `model_ids` by calling the app's model manager loader. Errors encountered while loading an individual model are caught and logged; they do not stop the remaining models from being processed.
+    
+    Parameters:
+        app (Any): Application object with a `state.model_manager` providing `get_or_load(model_id)`.
+        model_ids (list[str]): Sequence of model identifier strings to preload.
+    """
     logger = logging.getLogger(__name__)
     logger.info(f"Preloading {len(model_ids)} model(s)...")
 
@@ -232,7 +275,11 @@ def preload_models(app: Any, model_ids: list[str]) -> None:
 
 
 def main() -> None:
-    """Main entry point for the server."""
+    """
+    Start the Loom server using command-line arguments and configuration.
+    
+    Loads configuration (optionally overridden by CLI), applies it as the global config, configures logging, constructs the HTTP/FastAPI app, optionally preloads models, and launches the server using the configured transport mode ('http', 'unix', or 'both'). Exits with status 1 if the transport value is unrecognized.
+    """
     args = parse_args()
 
     # Load configuration

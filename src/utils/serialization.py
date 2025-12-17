@@ -32,16 +32,15 @@ def tensor_to_list(tensor: torch.Tensor | np.ndarray) -> list[float]:
 
 
 def tensor_to_base64(tensor: torch.Tensor | np.ndarray, dtype: str = "float32") -> str:
-    """Convert tensor to base64-encoded bytes.
-
-    More efficient for large tensors than JSON lists.
-
-    Args:
-        tensor: PyTorch tensor or numpy array
-        dtype: Target dtype for encoding
-
+    """
+    Encode a tensor or NumPy array as a base64 ASCII string of its raw bytes after casting to a specified dtype.
+    
+    Parameters:
+        tensor (torch.Tensor | numpy.ndarray): Input tensor or array to encode.
+        dtype (str): NumPy dtype name to cast the array to before encoding (e.g., "float32"). Defaults to "float32".
+    
     Returns:
-        Base64-encoded string
+        str: Base64-encoded ASCII string containing the array's raw bytes after casting to `dtype`.
     """
     if isinstance(tensor, torch.Tensor):
         # Convert bfloat16 to float32 first since numpy doesn't support bf16
@@ -59,15 +58,16 @@ def tensor_to_base64(tensor: torch.Tensor | np.ndarray, dtype: str = "float32") 
 
 
 def base64_to_array(encoded: str, shape: tuple[int, ...], dtype: str = "float32") -> np.ndarray:
-    """Decode base64-encoded tensor back to numpy array.
-
-    Args:
-        encoded: Base64-encoded string
-        shape: Target shape for the array
-        dtype: Data type of the encoded data
-
+    """
+    Convert a base64-encoded buffer into a NumPy array with the given shape and dtype.
+    
+    Parameters:
+        encoded (str): Base64-encoded ASCII string containing the array bytes.
+        shape (tuple[int, ...]): Desired shape of the resulting array.
+        dtype (str): NumPy dtype name for interpreting the bytes (e.g., "float32"). Defaults to "float32".
+    
     Returns:
-        Numpy array with specified shape
+        np.ndarray: Array reshaped to `shape` and having the specified `dtype`.
     """
     decoded = base64.b64decode(encoded)
     arr = np.frombuffer(decoded, dtype=np.dtype(dtype))
@@ -78,14 +78,27 @@ def serialize_hidden_states(
     hidden_states: Mapping[int, HiddenStateResult | torch.Tensor | np.ndarray],
     format: str = "list",
 ) -> dict[str, Any]:
-    """Serialize hidden states for JSON response.
-
-    Args:
-        hidden_states: Mapping of layer index to hidden state
-        format: Serialization format ("list" or "base64")
-
+    """
+    Serialize a mapping of layer indices to hidden-state tensors or arrays into a JSON-friendly dictionary.
+    
+    Parameters:
+        hidden_states (Mapping[int, HiddenStateResult | torch.Tensor | np.ndarray]):
+            Mapping from layer index to a hidden state. Each value may be a HiddenStateResult (providing .vector, .shape, .dtype),
+            a torch.Tensor, or any array-like object convertible to a NumPy array.
+        format (str):
+            Serialization format: "list" to produce a flattened Python list of numbers under the "data" key, or "base64" to produce a
+            base64-encoded string of the tensor bytes (dtype "float32") with an additional "encoding": "base64" field.
+    
     Returns:
-        JSON-serializable dictionary
+        dict[str, Any]:
+            Dictionary keyed by stringified layer indices. Each value is a dict containing:
+              - "shape": list of integers describing the array shape,
+              - "dtype": the data type string,
+              - "data": either a flattened list of numbers (for "list") or a base64 string (for "base64").
+            When "base64" format is used, the returned dtype will be "float32" and "encoding" will be "base64".
+    
+    Raises:
+        ValueError: If `format` is not "list" or "base64".
     """
     result: dict[str, Any] = {}
 
@@ -133,13 +146,19 @@ def serialize_hidden_states(
 def deserialize_hidden_states(
     data: dict[str, Any],
 ) -> dict[int, np.ndarray]:
-    """Deserialize hidden states from JSON response.
-
-    Args:
-        data: Serialized hidden states dictionary
-
+    """
+    Convert a JSON-serializable mapping of serialized hidden states into a mapping of layer indices to NumPy arrays.
+    
+    Parameters:
+        data (dict[str, Any]): Mapping where keys are stringified layer indices and values are dicts with at least:
+            - "shape": list/tuple of ints describing the array shape
+            - "data": either a flat list of values or a base64-encoded string
+            Optional fields:
+            - "dtype": NumPy dtype as string (defaults to "float32")
+            - "encoding": if set to "base64", "data" is treated as a base64-encoded byte buffer
+    
     Returns:
-        Mapping of layer index to numpy array
+        dict[int, numpy.ndarray]: Mapping from integer layer index to a NumPy array reconstructed with the provided shape and dtype.
     """
     result: dict[int, np.ndarray] = {}
 

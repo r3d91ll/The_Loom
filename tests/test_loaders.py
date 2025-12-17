@@ -253,7 +253,12 @@ class TestLoaderRegistryIntegration:
 
     @pytest.fixture
     def mock_loaded_model(self):
-        """Create a mock loaded model."""
+        """
+        Create a LoadedModel stub for tests.
+        
+        Returns:
+            LoadedModel: A mock LoadedModel with MagicMock `model` and `tokenizer`, `model_id` "test-model", CPU `device`, `dtype` float32, `hidden_size` 768, `num_layers` 12, `loader_type` "transformers", and `metadata` {"loader_name": "transformers"}.
+        """
         return LoadedModel(
             model=MagicMock(),
             tokenizer=MagicMock(),

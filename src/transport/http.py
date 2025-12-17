@@ -286,6 +286,14 @@ class ModelManager:
         registry: LoaderRegistry,
         max_models: int = 3,
     ):
+        """
+        Create a ModelManager that loads and manages models with an LRU eviction policy.
+        
+        Parameters:
+            gpu_manager: Manager responsible for GPU device allocation and cache management.
+            registry: Loader registry used to resolve and load models.
+            max_models (int): Maximum number of models to keep loaded simultaneously; older models are evicted when capacity is exceeded.
+        """
         self.gpu_manager = gpu_manager
         self.registry = registry
         self.max_models = max_models
@@ -300,17 +308,18 @@ class ModelManager:
         loader_name: str | None = None,
         quantization: str | None = None,
     ) -> LoadedModel:
-        """Get a loaded model, loading it if necessary.
-
-        Args:
-            model_id: Model identifier
-            device: Device to load on (uses default if None)
-            dtype: Data type
-            loader_name: Force specific loader (auto-detect if None)
-            quantization: Quantization mode (4bit, 8bit, gptq, awq)
-
+        """
+        Retrieve a LoadedModel by model_id, loading and caching it if not already present.
+        
+        Parameters:
+            model_id (str): Identifier of the model to retrieve.
+            device (str | None): Target device for loading; when None the GPU manager's default device is used.
+            dtype (str): Desired numeric dtype for the model (e.g., "float16", "float32", or "auto").
+            loader_name (str | None): Specific loader to use; when None the loader will be auto-detected.
+            quantization (str | None): Quantization mode to apply (e.g., "4bit", "8bit", "gptq", "awq"), if any.
+        
         Returns:
-            LoadedModel instance
+            LoadedModel: The loaded and cached model instance for the requested model_id.
         """
         # Check if already loaded
         if model_id in self.loaded_models:
@@ -344,7 +353,11 @@ class ModelManager:
         return loaded
 
     def _evict_oldest(self) -> None:
-        """Evict the least recently used model."""
+        """
+        Remove the least-recently-used model from the manager and clear the GPU cache.
+        
+        If no models are loaded, this is a no-op.
+        """
         if not self.access_order:
             return
 
@@ -355,7 +368,17 @@ class ModelManager:
             self.gpu_manager.clear_cache()
 
     def unload(self, model_id: str) -> bool:
-        """Unload a specific model."""
+        """
+        Unload the specified loaded model from memory and clear related GPU cache.
+        
+        Clears the GPU cache and logs the unload when a model is removed.
+        
+        Parameters:
+            model_id (str): Identifier of the model to unload.
+        
+        Returns:
+            bool: True if the model was loaded and successfully unloaded, False if the model was not found.
+        """
         if model_id not in self.loaded_models:
             return False
 
@@ -367,11 +390,30 @@ class ModelManager:
         return True
 
     def list_loaded(self) -> list[str]:
-        """List currently loaded models."""
+        """
+        Return the identifiers of models currently loaded in the manager.
+        
+        Returns:
+            loaded_models (list[str]): List of model IDs for all models currently loaded.
+        """
         return list(self.loaded_models.keys())
 
     def get_loaded_info(self) -> list[dict[str, Any]]:
-        """Get detailed info about loaded models."""
+        """
+        Return a list of dictionaries describing each currently loaded model.
+        
+        Each dictionary contains:
+        - `model_id`: model identifier string
+        - `device`: device identifier (e.g., "cuda:0" or "cpu")
+        - `dtype`: data type name (e.g., "float16", "float32")
+        - `hidden_size`: hidden dimension size
+        - `num_layers`: number of model layers
+        - `loader_type`: name of the loader used to load the model
+        - `quantization`: quantization metadata value or "none" if not present
+        
+        Returns:
+            list[dict[str, Any]]: List of per-model information dictionaries.
+        """
         return [
             {
                 "model_id": model.model_id,
@@ -395,7 +437,14 @@ class MetricsMiddleware(BaseHTTPMiddleware):
     """Middleware to track request metrics."""
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:
-        """Track request latency and status."""
+        """
+        Track request latency and record request metrics.
+        
+        Skips the /metrics endpoint to avoid recursive metrics collection. Measures the request latency, records the endpoint, HTTP method, status code, and latency via `record_request`, and returns the downstream response.
+        
+        Returns:
+            Response: The HTTP response produced by the next handler.
+        """
         # Skip metrics endpoint itself to avoid recursion
         if request.url.path == "/metrics":
             response: Response = await call_next(request)
@@ -422,13 +471,16 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
 
 def create_http_app(config: Config | None = None) -> FastAPI:
-    """Create the FastAPI application.
-
-    Args:
-        config: Server configuration (uses global config if None)
-
+    """
+    Create and configure the FastAPI application for the hidden-state extraction server.
+    
+    Initializes CORS and optional metrics middleware, GPU manager, loader registry, and model manager, registers all HTTP endpoints (health, metrics, model management, generation, streaming generation, embedding, analysis, and batch operations), and stores core components on app.state.
+    
+    Parameters:
+        config (Config | None): Optional server configuration; when None the global configuration is used.
+    
     Returns:
-        Configured FastAPI application
+        FastAPI: A configured FastAPI application ready to serve the transport HTTP API.
     """
     if config is None:
         config = get_config()
@@ -481,7 +533,12 @@ def create_http_app(config: Config | None = None) -> FastAPI:
 
     @app.get("/health", response_model=HealthResponse)
     async def health_check() -> HealthResponse:
-        """Health check endpoint."""
+        """
+        Return overall service health and runtime information.
+        
+        Returns:
+            HealthResponse: Contains `status` ("healthy" or other), `model_loaded` (the first loaded model ID or `None`), `gpu_info` (GPU state as a dict), and `config` with `max_loaded_models` and `default_layers`.
+        """
         loaded_models = model_manager.list_loaded()
         # Update loaded models gauge
         set_models_loaded(len(loaded_models))
@@ -508,7 +565,14 @@ def create_http_app(config: Config | None = None) -> FastAPI:
 
     @app.get("/models")
     async def list_models() -> dict[str, Any]:
-        """List loaded models with detailed info."""
+        """
+        Return information about currently loaded models and the configured maximum.
+        
+        Returns:
+            info (dict): Dictionary with two keys:
+                - "loaded_models": a list of dictionaries, each containing details for a loaded model (id, device, dtype, hidden_size, num_layers, loader_type, quantization).
+                - "max_models": the configured maximum number of models allowed to be loaded (int).
+        """
         return {
             "loaded_models": model_manager.get_loaded_info(),
             "max_models": config.models.max_loaded,
@@ -516,7 +580,14 @@ def create_http_app(config: Config | None = None) -> FastAPI:
 
     @app.get("/loaders")
     async def list_loaders() -> dict[str, Any]:
-        """List available loaders."""
+        """
+        Provide information about available model loaders and their configured fallback order.
+        
+        Returns:
+            info (dict): A dictionary with two keys:
+                - "loaders": mapping of loader names to loader metadata as returned by the loader registry.
+                - "fallback_order": list of loader names in the order they will be probed for a given model id.
+        """
         return {
             "loaders": registry.list_loaders(),
             "fallback_order": registry.fallback_order,
@@ -524,9 +595,11 @@ def create_http_app(config: Config | None = None) -> FastAPI:
 
     @app.get("/loaders/probe/{model_id:path}")
     async def probe_model_loader(model_id: str) -> dict[str, Any]:
-        """Probe which loader would handle a model without loading it.
-
-        Useful for debugging loader selection.
+        """
+        Determine which loader would handle the given model identifier without loading the model.
+        
+        Returns:
+            probe_result (dict): Probe results describing the selected loader and related metadata.
         """
         # Handle URL encoding (-- back to /)
         model_id = model_id.replace("--", "/")
@@ -534,7 +607,15 @@ def create_http_app(config: Config | None = None) -> FastAPI:
 
     @app.post("/models/load", response_model=ModelLoadResponse)
     async def load_model(request: ModelLoadRequest) -> ModelLoadResponse:
-        """Load a model into memory."""
+        """
+        Load the requested model into memory and return its load metadata.
+        
+        Returns:
+            ModelLoadResponse: Contains the loaded model's identifier, device, dtype (stringified), hidden_size, num_layers, reported load_time_seconds, loader_type, and quantization.
+        
+        Raises:
+            HTTPException: Raised with status code 500 if the model fails to load; the exception's detail contains the error message.
+        """
         start_time = time.perf_counter()
         try:
             loaded = model_manager.get_or_load(
@@ -580,7 +661,18 @@ def create_http_app(config: Config | None = None) -> FastAPI:
 
     @app.delete("/models/{model_id}")
     async def unload_model(model_id: str) -> dict[str, Any]:
-        """Unload a model from memory."""
+        """
+        Unload a previously loaded model and free its resources.
+        
+        Parameters:
+            model_id (str): Identifier of the model to unload. Instances of "--" in the string are normalized to "/".
+        
+        Returns:
+            result (dict[str, Any]): Dictionary containing "status" set to "unloaded" and the normalized "model_id".
+        
+        Raises:
+            HTTPException: 404 if the specified model is not currently loaded.
+        """
         # Handle URL encoding
         model_id = model_id.replace("--", "/")
         success = model_manager.unload(model_id)
@@ -592,10 +684,17 @@ def create_http_app(config: Config | None = None) -> FastAPI:
 
     @app.post("/generate", response_model=GenerateResponse)
     async def generate(request: GenerateRequest) -> GenerateResponse:
-        """Generate text with optional hidden state extraction.
-
-        This is the core research endpoint - it returns the geometric
-        representation (hidden state) alongside the generated text.
+        """
+        Generate text and optionally return serialized hidden states and attention weights.
+        
+        Parameters:
+            request (GenerateRequest): Generation settings including model id, prompt, token limits, sampling params, and flags for returning hidden states or attention.
+        
+        Returns:
+            GenerateResponse: Contains generated text, token_count, optional serialized `hidden_states`, optional serialized `attention_weights`, and `metadata` about the generation.
+        
+        Raises:
+            HTTPException: On failure to load the model or generate (status code 500 with error detail).
         """
         start_time = time.perf_counter()
         try:
@@ -666,10 +765,13 @@ def create_http_app(config: Config | None = None) -> FastAPI:
 
     @app.post("/embed", response_model=EmbedResponse)
     async def embed(request: EmbedRequest) -> EmbedResponse:
-        """Extract embedding for text.
-
-        For decoder-only models, this uses the last token's hidden state
-        as the embedding (contains accumulated context).
+        """
+        Produce an embedding for the provided text.
+        
+        If the underlying model is decoder-only, the embedding is taken from the last token's hidden state (which includes accumulated context). If `request.normalize` is true, the returned embedding is L2-normalized.
+        
+        Returns:
+            EmbedResponse: Object containing `embedding` (list of floats), `shape` (list of ints), and `metadata`.
         """
         start_time = time.perf_counter()
         try:
@@ -711,9 +813,14 @@ def create_http_app(config: Config | None = None) -> FastAPI:
 
     @app.post("/analyze")
     async def analyze_embedding(request: EmbedRequest) -> dict[str, Any]:
-        """Extract embedding and compute diagnostic metrics.
-
-        Returns hidden state analysis including D_eff estimation.
+        """
+        Compute diagnostic metrics for a single text embedding.
+        
+        Returns:
+            analysis (dict): Analysis results produced by hidden-state analysis. Includes an "embedding_shape" key with the embedding shape as a list and any metadata from the embedding output.
+        
+        Raises:
+            HTTPException: If embedding extraction or analysis fails.
         """
         try:
             loaded = model_manager.get_or_load(request.model)
@@ -746,22 +853,25 @@ def create_http_app(config: Config | None = None) -> FastAPI:
 
     @app.post("/generate/stream")
     async def generate_stream(request: StreamingGenerateRequest) -> StreamingResponse:
-        """Generate text with streaming Server-Sent Events.
-
-        Returns SSE stream with events:
-        - event: token - For each generated token
-        - event: done - Final event with complete output and hidden states
-        - event: error - If an error occurs
-
-        Example SSE format:
-            event: token
-            data: {"token": "Hello", "token_id": 1}
-
-            event: done
-            data: {"text": "Hello world", "token_count": 2, "hidden_states": {...}}
+        """
+        Stream generation results as Server-Sent Events.
+        
+        Emits SSE messages for the stream: `token` events for each generated token, a `done` event with the final output (text, token_count, token_ids, metadata) and optional serialized hidden states, and an `error` event if generation fails.
+        
+        Returns:
+            StreamingResponse: An SSE stream that yields JSON-encoded event data for `token`, `done`, and `error` events.
         """
 
         async def event_generator() -> AsyncIterator[str]:
+            """
+            Produce Server-Sent Events (SSE) messages for a streaming generation request, emitting per-token updates and a final completion event, and an error event if streaming fails.
+            
+            Yields:
+                SSE-formatted strings representing one of:
+                  - a `token` event with fields `token`, `token_id`, `is_finished`, and `finish_reason`;
+                  - a `done` event with final `text`, `token_count`, `token_ids`, `metadata`, and optionally `hidden_states` (serialized according to the request format);
+                  - an `error` event with an `error` message when an exception occurs.
+            """
             try:
                 # Get or load model
                 loaded = model_manager.get_or_load(
@@ -825,9 +935,20 @@ def create_http_app(config: Config | None = None) -> FastAPI:
 
     @app.post("/generate/batch", response_model=BatchGenerateResponse)
     async def generate_batch(request: BatchGenerateRequest) -> BatchGenerateResponse:
-        """Generate text for multiple prompts in a batch.
-
-        Processes all prompts with the same model efficiently.
+        """
+        Generate text for each prompt in the request using a single loaded model.
+        
+        Processes all prompts with the same model instance and returns per-prompt generation outputs, including optional serialized hidden states.
+        
+        Parameters:
+            request (BatchGenerateRequest): Batch generation request containing the model identifier, list of prompts, and generation options (max_tokens, temperature, top_p, hidden-state flags, and formatting).
+        
+        Returns:
+            BatchGenerateResponse: Object containing:
+                - results (list[GenerateResponse]): Generation result for each prompt.
+                - total_tokens (int): Sum of token counts across all prompts.
+                - total_time_ms (float): Total processing time in milliseconds.
+                - prompts_processed (int): Number of prompts processed.
         """
         start_time = time.time()
         results: list[GenerateResponse] = []
@@ -887,9 +1008,27 @@ def create_http_app(config: Config | None = None) -> FastAPI:
 
     @app.post("/embed/batch", response_model=BatchEmbedResponse)
     async def embed_batch(request: BatchEmbedRequest) -> BatchEmbedResponse:
-        """Extract embeddings for multiple texts in a batch.
-
-        Processes all texts with the same model efficiently.
+        """
+        Generate embeddings for multiple texts using a single loaded model.
+        
+        Processes the provided texts with the same model and returns their embeddings, per-embedding shapes, total processing time in milliseconds, and the number of texts processed.
+        
+        Parameters:
+            request (BatchEmbedRequest): Batch embedding request containing:
+                - model: model identifier to use.
+                - texts: list of input strings to embed.
+                - pooling: pooling strategy applied to model outputs.
+                - normalize: if true, L2-normalize each embedding vector.
+        
+        Returns:
+            BatchEmbedResponse: Contains:
+                - embeddings: list of embedding vectors (one list of floats per input text).
+                - shapes: list of shapes corresponding to each embedding.
+                - total_time_ms: total time spent processing the batch in milliseconds.
+                - texts_processed: number of texts processed.
+        
+        Raises:
+            HTTPException: on failure to load the model or compute embeddings (returns HTTP 500).
         """
         import numpy as np
 

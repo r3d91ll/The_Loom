@@ -52,12 +52,17 @@ class LoaderRegistry:
         loader_configs: dict[str, dict[str, Any]] | None = None,
         custom_model_configs: dict[str, CustomModelConfig] | None = None,
     ):
-        """Initialize the registry with configured loaders.
-
-        Args:
-            loader_configs: Per-model loader configuration overrides
-                Example: {"model-id": {"loader": "transformers", "dtype": "float16"}}
-            custom_model_configs: Custom model configurations for CustomLoader
+        """
+        Create a LoaderRegistry and initialize default model loaders and their fallback order.
+        
+        Initializes per-model loader overrides, constructs the default loaders in priority order
+        (`transformers`, `sentence_transformers`, `custom`), and sets the fallback order used for
+        auto-detection. Logs the initialized loader names.
+        
+        Parameters:
+            loader_configs: Optional mapping of model IDs to loader-specific configuration overrides
+                (e.g. {"model-id": {"loader": "transformers", "dtype": "float16"}}).
+            custom_model_configs: Optional configuration data passed to the CustomLoader for custom models.
         """
         self.loader_configs = loader_configs or {}
 
@@ -86,11 +91,14 @@ class LoaderRegistry:
         )
 
     def register_loader(self, name: str, loader: ModelLoader) -> None:
-        """Register a new loader.
-
-        Args:
-            name: Unique name for the loader
-            loader: ModelLoader instance
+        """
+        Add a model loader to the registry and ensure it appears in the fallback order.
+        
+        If the loader name is not already present in the fallback order, it is inserted before the 'custom' entry so the loader will be considered prior to the custom fallback.
+        
+        Parameters:
+            name (str): Unique identifier for the loader.
+            loader (ModelLoader): Loader instance to register.
         """
         self.loaders[name] = loader
         if name not in self.fallback_order:
@@ -133,9 +141,11 @@ class LoaderRegistry:
         return "transformers", self.loaders["transformers"]
 
     def get_model_config(self, model_id: str) -> dict[str, Any]:
-        """Get merged configuration for a model.
-
-        Combines default config with model-specific overrides.
+        """
+        Return the configuration for a model with defaults overridden by any per-model settings.
+        
+        Returns:
+            A dictionary containing resolved model configuration values (e.g., `device`, `dtype`, `trust_remote_code`), with any per-model overrides applied.
         """
         base_config = {
             "device": "cuda:0",
@@ -157,18 +167,19 @@ class LoaderRegistry:
         quantization: str | None = None,
         **kwargs: Any,
     ) -> LoadedModel:
-        """Load a model using the appropriate loader.
-
-        Args:
-            model_id: Model identifier (HuggingFace ID or local path)
-            device: Override device (uses config default if None)
-            dtype: Override dtype (uses config default if None)
-            loader_name: Force specific loader (auto-detect if None)
-            quantization: Quantization mode (4bit, 8bit, gptq, awq)
-            **kwargs: Additional arguments passed to loader
-
+        """
+        Selects an appropriate loader and loads the specified model into memory.
+        
+        Parameters:
+            model_id (str): Model identifier (e.g., HuggingFace ID or local path).
+            device (str | None): Device override; if None the model config default is used.
+            dtype (str | None): Dtype override; if None the model config default is used.
+            loader_name (str | None): If provided, forces that loader; if None the registry auto-detects a loader and falls back to the default.
+            quantization (str | None): Quantization mode to apply (e.g., "4bit", "8bit", "gptq", "awq").
+            **kwargs: Additional loader-specific options forwarded to the selected loader.
+        
         Returns:
-            LoadedModel with the loaded model
+            LoadedModel: The loaded model. The returned object's metadata contains "loader_name" set to the loader that performed the load.
         """
         # Get model-specific config
         model_config = self.get_model_config(model_id)
@@ -209,15 +220,16 @@ class LoaderRegistry:
         prompt: str,
         **kwargs: Any,
     ) -> GenerationOutput:
-        """Generate text using the model's loader.
-
-        Args:
-            loaded_model: Previously loaded model
-            prompt: Input prompt
-            **kwargs: Generation parameters
-
+        """
+        Generate text from a loaded model using the loader recorded on the model.
+        
+        Parameters:
+            loaded_model (LoadedModel): A model instance previously returned by `load`.
+            prompt (str): The input prompt to generate from.
+            **kwargs: Additional generation options passed through to the underlying loader.
+        
         Returns:
-            GenerationOutput with text and hidden states
+            GenerationOutput: The generated text and any available hidden states.
         """
         loader_name = loaded_model.metadata.get("loader_name", loaded_model.loader_type)
         loader = self.loaders.get(loader_name, self.loaders["transformers"])
@@ -230,15 +242,17 @@ class LoaderRegistry:
         prompt: str,
         **kwargs: Any,
     ) -> Iterator[StreamingToken | StreamingOutput]:
-        """Generate text with streaming using the model's loader.
-
-        Args:
-            loaded_model: Previously loaded model
-            prompt: Input prompt
-            **kwargs: Generation parameters
-
+        """
+        Stream generation tokens produced by the loader associated with the provided LoadedModel.
+        
+        Parameters:
+            loaded_model (LoadedModel): Previously loaded model whose associated loader will produce the stream.
+            prompt (str): Input prompt to generate from.
+            **kwargs: Generation parameters forwarded to the loader.
+        
         Yields:
-            StreamingToken for each token, then StreamingOutput at end
+            StreamingToken: Emitted for each generated token.
+            StreamingOutput: Emitted once after the token stream completes.
         """
         loader_name = loaded_model.metadata.get("loader_name", loaded_model.loader_type)
         loader = self.loaders.get(loader_name, self.loaders["transformers"])
@@ -251,15 +265,16 @@ class LoaderRegistry:
         text: str,
         **kwargs: Any,
     ) -> EmbeddingOutput:
-        """Extract embedding using the model's loader.
-
-        Args:
-            loaded_model: Previously loaded model
-            text: Text to embed
-            **kwargs: Embedding parameters
-
+        """
+        Compute an embedding for the given text using the loader associated with the provided loaded model.
+        
+        Parameters:
+            loaded_model (LoadedModel): A previously loaded model whose associated loader will perform the embedding.
+            text (str): Text to embed.
+            **kwargs: Optional embedding parameters forwarded to the underlying loader.
+        
         Returns:
-            EmbeddingOutput with embedding tensor
+            EmbeddingOutput: The computed embedding (embedding tensor and any loader-specific metadata).
         """
         loader_name = loaded_model.metadata.get("loader_name", loaded_model.loader_type)
         loader = self.loaders.get(loader_name, self.loaders["transformers"])
@@ -267,7 +282,14 @@ class LoaderRegistry:
         return loader.embed(loaded_model, text, **kwargs)
 
     def list_loaders(self) -> dict[str, dict[str, Any]]:
-        """List all registered loaders with their info."""
+        """
+        Provide a mapping of registered loader identifiers to basic metadata.
+        
+        Returns:
+            dict[str, dict[str, Any]]: Mapping from registry key to a metadata dict containing:
+                - "name": the loader's configured name (loader.name)
+                - "type": the loader's class name
+        """
         return {
             name: {
                 "name": loader.name,
@@ -277,15 +299,19 @@ class LoaderRegistry:
         }
 
     def probe_model(self, model_id: str) -> dict[str, Any]:
-        """Probe which loader would handle a model without loading it.
-
-        Useful for debugging and configuration.
-
-        Args:
-            model_id: Model identifier
-
+        """
+        Determine which registered loader would be used for a given model identifier without loading the model.
+        
+        Parameters:
+            model_id (str): The model identifier to probe.
+        
         Returns:
-            Dict with loader selection info
+            dict[str, Any]: A dictionary with the following keys:
+                - model_id: The probed model identifier.
+                - configured_loader: Loader name explicitly configured for this model, or None.
+                - detected_loader: First loader (by fallback order) whose `can_load` returned True, or None.
+                - can_load: Mapping of loader name to the boolean result of that loader's `can_load(model_id)`.
+                - selected_loader: The loader name that would be selected (configured loader unless set to "auto", otherwise detected_loader, otherwise "transformers").
         """
         results: dict[str, Any] = {
             "model_id": model_id,
@@ -322,7 +348,12 @@ _registry: LoaderRegistry | None = None
 
 
 def get_registry() -> LoaderRegistry:
-    """Get the global loader registry instance."""
+    """
+    Provide the global LoaderRegistry singleton, creating it on first access.
+    
+    Returns:
+        registry (LoaderRegistry): The global LoaderRegistry instance; created and stored if it did not already exist.
+    """
     global _registry
     if _registry is None:
         _registry = LoaderRegistry()
@@ -330,19 +361,27 @@ def get_registry() -> LoaderRegistry:
 
 
 def set_registry(registry: LoaderRegistry) -> None:
-    """Set the global loader registry instance."""
+    """
+    Set the global LoaderRegistry used by get_registry and related helpers.
+    
+    Parameters:
+        registry (LoaderRegistry): The registry instance to assign as the global singleton.
+    """
     global _registry
     _registry = registry
 
 
 def create_registry_from_config(config: Any) -> LoaderRegistry:
-    """Create a LoaderRegistry from application config.
-
-    Args:
-        config: Config object with model_overrides
-
+    """
+    Create a LoaderRegistry from an application configuration.
+    
+    Parameters:
+        config (Any): Application config object that may contain a `model_overrides`
+            attribute mapping model IDs to per-model loader configuration.
+    
     Returns:
-        Configured LoaderRegistry
+        LoaderRegistry: A registry initialized with `loader_configs` taken from
+        `config.model_overrides` (uses an empty dict if the attribute is absent).
     """
     loader_configs = getattr(config, "model_overrides", {})
     return LoaderRegistry(loader_configs=loader_configs)

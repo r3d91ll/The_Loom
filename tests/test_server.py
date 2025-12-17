@@ -13,7 +13,12 @@ from src.transport.http import create_http_app
 
 @pytest.fixture
 def mock_config():
-    """Create a test configuration."""
+    """
+    Create a default Config instance for tests.
+    
+    Returns:
+        Config: A new Config object initialized with default settings suitable for unit tests.
+    """
     return Config()
 
 
@@ -35,7 +40,14 @@ def mock_loaded_model():
 
 @pytest.fixture
 def mock_generation_output():
-    """Create a mock generation output."""
+    """
+    Create a mock GenerationOutput representing a short example generation.
+    
+    The returned object contains a short text "Hello, world!", token ids [1, 2, 3], a single-layer hidden state mapping for key -1, and metadata with inference timing and token counts.
+    
+    Returns:
+        GenerationOutput: A mock generation result with `text`, `token_ids`, `hidden_states`, `attention_weights` (None), and `metadata`.
+    """
     return GenerationOutput(
         text="Hello, world!",
         token_ids=[1, 2, 3],
@@ -51,7 +63,15 @@ def mock_generation_output():
 
 @pytest.fixture
 def mock_embedding_output():
-    """Create a mock embedding output."""
+    """
+    Constructs a mock EmbeddingOutput with a random 768-dimensional embedding and basic metadata for tests.
+    
+    Returns:
+        EmbeddingOutput: contains
+            - embedding (torch.Tensor): a randomly-initialized 1D tensor of length 768,
+            - shape (tuple): the embedding shape (768,),
+            - metadata (dict): includes "pooling" set to "last_token" and "inference_time_ms" with a sample value.
+    """
     return EmbeddingOutput(
         embedding=torch.randn(768),
         shape=(768,),

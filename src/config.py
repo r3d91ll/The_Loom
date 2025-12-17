@@ -128,7 +128,20 @@ class Config(BaseSettings):
 
 
 def find_config_file() -> Path | None:
-    """Find configuration file in standard locations."""
+    """
+    Locate a Loom configuration file by searching common filesystem locations in order.
+    
+    Searches these locations (in order) and returns the first path that exists:
+    - ./config.yaml
+    - ./config.yml
+    - ./loom.yaml
+    - ~/.config/loom/config.yaml
+    - ~/.config/loom/config.yml
+    - /etc/loom/config.yaml
+    
+    Returns:
+        Path | None: The path to the first existing configuration file, or `None` if no file is found.
+    """
     search_paths = [
         Path.cwd() / "config.yaml",
         Path.cwd() / "config.yml",
@@ -174,7 +187,16 @@ def load_config(config_path: str | Path | None = None) -> Config:
 
 
 def get_model_config(config: Config, model_id: str) -> dict[str, Any]:
-    """Get configuration for a specific model, merging defaults with overrides."""
+    """
+    Compute the effective configuration for a given model by merging global defaults with any model-specific overrides.
+    
+    Parameters:
+        config (Config): Global server configuration.
+        model_id (str): Identifier of the model whose overrides should be applied.
+    
+    Returns:
+        dict[str, Any]: Effective model configuration. Contains default keys such as `dtype`, `device`, and `loader`, with values replaced or extended by any entries from `config.model_overrides[model_id]` when present.
+    """
     base_config = {
         "dtype": config.models.default_dtype,
         "device": f"cuda:{config.gpu.default_device}",
@@ -193,7 +215,12 @@ _config: Config | None = None
 
 
 def get_config() -> Config:
-    """Get the global configuration instance."""
+    """
+    Return the application's global configuration singleton.
+    
+    Returns:
+        Config: The global Config instance; created and loaded on first access.
+    """
     global _config
     if _config is None:
         _config = load_config()
@@ -201,6 +228,13 @@ def get_config() -> Config:
 
 
 def set_config(config: Config) -> None:
-    """Set the global configuration instance."""
+    """
+    Replace the module-level global configuration with the provided Config instance.
+    
+    This updates the internal singleton used by get_config() so subsequent calls return `config`.
+    
+    Parameters:
+        config (Config): Configuration to install as the module-global instance.
+    """
     global _config
     _config = config
