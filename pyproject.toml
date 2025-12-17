@@ -3,7 +3,7 @@ name = "the-loom"
 version = "0.2.0"
 description = "The Loom - Model server exposing hidden states for AI interpretability research (part of the Weaver ecosystem)"
 readme = "README.md"
-license = "MIT"
+license = "Apache-2.0"
 authors = ["Todd Bucy"]
 keywords = ["machine-learning", "research", "interpretability", "hidden-states", "transformers", "weaver", "loom"]
 packages = [{include = "src"}]
