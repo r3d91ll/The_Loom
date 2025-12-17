@@ -143,6 +143,16 @@ class MistralTokenizerWrapper:
 
         # Handle padding
         if padding and len(all_input_ids) > 1:
+            # Determine pad token ID with safe fallback chain
+            pad_id = self._pad_token_id
+            if pad_id is None:
+                pad_id = self._eos_token_id  # Common fallback
+            if pad_id is None:
+                raise ValueError(
+                    "Cannot pad sequences: no pad_token_id or eos_token_id available. "
+                    "Either disable padding or use a tokenizer with a defined pad token."
+                )
+
             max_len = max(len(ids) for ids in all_input_ids)
             if max_length is not None:
                 max_len = min(max_len, max_length)
@@ -152,7 +162,7 @@ class MistralTokenizerWrapper:
                 if truncation and len(ids) > max_len:
                     ids = ids[:max_len]
                 pad_len = max_len - len(ids)
-                padded_ids.append(ids + [self._pad_token_id or 0] * pad_len)
+                padded_ids.append(ids + [pad_id] * pad_len)
                 attention_masks.append([1] * len(ids) + [0] * pad_len)
             all_input_ids = padded_ids
         else:
