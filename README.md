@@ -6,7 +6,7 @@
 
 Production inference servers (vLLM, Ollama, TGI, llama.cpp) are optimized for throughput. They don't expose the final hidden state - the geometric representation of meaning *before* text generation.
 
-```
+```text
 Input → [Transformer Layers] → Hidden State → [lm_head] → Logits → Tokens
                                     ↑
                           THE LOOM EXPOSES THIS
@@ -54,6 +54,7 @@ Most HuggingFace transformer models should work. The Loom auto-detects the appro
 Generate text with hidden state extraction.
 
 **Request:**
+
 ```json
 {
   "model": "mistralai/Mistral-7B-Instruct-v0.3",
@@ -66,6 +67,7 @@ Generate text with hidden state extraction.
 ```
 
 **Response:**
+
 ```json
 {
   "text": "I'm doing well, thank you for asking!",
@@ -209,11 +211,13 @@ poetry run loom --transport both --port 8080 --unix-socket /tmp/loom.sock
 ```
 
 **When to use Unix sockets:**
+
 - Local applications on the same machine (lower latency than HTTP)
 - High-frequency requests from co-located processes
 - Pipelines where The Loom runs alongside your analysis code
 
 **Connecting via Unix socket (Python):**
+
 ```python
 import httpx
 
@@ -362,6 +366,7 @@ Apache-2.0
 ## Acknowledgments
 
 Built with:
+
 - [HuggingFace Transformers](https://github.com/huggingface/transformers)
 - [FastAPI](https://fastapi.tiangolo.com/)
 - [Sentence Transformers](https://www.sbert.net/)
