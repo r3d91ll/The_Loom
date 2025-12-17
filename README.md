@@ -144,7 +144,7 @@ Check which loader would handle a model without loading it.
 ### Docker (Recommended)
 
 ```bash
-# Basic usage
+# Basic usage (lazy loading - models load on first request)
 docker run -d --gpus all -p 8080:8080 tbucy/loom:latest
 
 # With persistent model cache (recommended)
@@ -164,6 +164,33 @@ docker run -d --gpus all -p 8080:8080 \
   tbucy/loom:latest
 ```
 
+### Cloud Deployment with Preloaded Model
+
+For cloud deployments (RunPod, Lambda Labs, AWS, etc.), preload your model at startup so it's ready immediately:
+
+```bash
+# Preload a specific model at container startup
+docker run -d --gpus all -p 8080:8080 \
+  -v ~/.cache/huggingface:/app/.cache/huggingface \
+  tbucy/loom:latest \
+  sh -c "python -m src.server --host 0.0.0.0 --port 8080 --preload mistralai/Mistral-7B-Instruct-v0.3"
+
+# Preload multiple models (if you have enough VRAM)
+docker run -d --gpus all -p 8080:8080 \
+  -v ~/.cache/huggingface:/app/.cache/huggingface \
+  tbucy/loom:latest \
+  sh -c "python -m src.server --host 0.0.0.0 --port 8080 \
+    --preload mistralai/Mistral-7B-Instruct-v0.3 \
+    --preload BAAI/bge-small-en-v1.5"
+
+# With quantization for larger models on limited VRAM
+docker run -d --gpus all -p 8080:8080 \
+  -e HF_TOKEN=your_token_here \
+  -v ~/.cache/huggingface:/app/.cache/huggingface \
+  tbucy/loom:latest \
+  sh -c "python -m src.server --host 0.0.0.0 --port 8080 --preload meta-llama/Llama-3.1-8B-Instruct"
+```
+
 ### Docker Compose
 
 ```yaml
@@ -177,6 +204,33 @@ services:
       - LOOM_DEFAULT_DEVICE=cuda:0
     volumes:
       - ~/.cache/huggingface:/app/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+```
+
+**Docker Compose with preloaded model:**
+
+```yaml
+services:
+  loom:
+    image: tbucy/loom:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - LOOM_MAX_MODELS=1
+      - LOOM_DEFAULT_DEVICE=cuda:0
+      - HF_TOKEN=${HF_TOKEN}  # For gated models
+    volumes:
+      - ~/.cache/huggingface:/app/.cache/huggingface
+    # Override command to preload model at startup
+    command: >
+      sh -c "python -m src.server --host 0.0.0.0 --port 8080
+      --preload mistralai/Mistral-7B-Instruct-v0.3"
     deploy:
       resources:
         reservations:
