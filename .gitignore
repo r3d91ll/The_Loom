@@ -62,3 +62,6 @@ Thumbs.db
 *.ckpt
 models/
 checkpoints/
+
+# Claude Code configuration (local only)
+CLAUDE.md
