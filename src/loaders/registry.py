@@ -4,7 +4,7 @@ The registry manages multiple loaders and automatically selects the best
 loader for each model based on:
 1. Explicit configuration (model_overrides in config)
 2. Loader can_load() checks (pattern matching)
-3. Fallback chain (transformers -> sentence_transformers -> custom)
+3. Fallback chain (mistral -> qwen -> transformers -> sentence_transformers -> custom)
 
 This enables seamless loading of diverse models without manual loader selection.
 """
@@ -53,6 +53,13 @@ class LoaderRegistry:
         custom_model_configs: dict[str, CustomModelConfig] | None = None,
     ):
         """Initialize the registry with configured loaders.
+
+        Loaders are checked in priority order:
+        1. mistral - Specialized loader for Mistral models
+        2. qwen - Specialized loader for Qwen models
+        3. transformers - General HuggingFace transformers (~80% of models)
+        4. sentence_transformers - Embedding models (BGE, E5, SBERT)
+        5. custom - Edge cases and research models
 
         Args:
             loader_configs: Per-model loader configuration overrides
