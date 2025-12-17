@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, ClassVar
 
 import torch
 from transformers import AutoConfig, AutoTokenizer
@@ -56,7 +56,7 @@ class QwenLoader(ModelLoader):
     """
 
     # Patterns that indicate a model needs the Qwen loader
-    QWEN_MULTIMODAL_PATTERNS = [
+    QWEN_MULTIMODAL_PATTERNS: ClassVar[list[str]] = [
         "qwen/qwen3-omni",
         "qwen/qwen2.5-omni",
         "qwen/qwen2_5-omni",
@@ -547,7 +547,10 @@ class QwenLoader(ModelLoader):
         """Generate text with streaming output.
 
         Falls back to non-streaming generation and yields tokens.
+        Note: This provides buffered pseudo-streaming, not true real-time
+        token streaming like TransformersLoader.generate_stream.
         """
+        logger.debug("Qwen generate_stream uses buffered output, not true streaming")
         # Use non-streaming generate and yield tokens
         output = self.generate(
             loaded_model=loaded_model,

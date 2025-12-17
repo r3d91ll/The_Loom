@@ -753,7 +753,10 @@ class MistralLoader(ModelLoader):
         """Generate text with streaming output.
 
         Falls back to non-streaming generation and yields tokens.
+        Note: This provides buffered pseudo-streaming, not true real-time
+        token streaming like TransformersLoader.generate_stream.
         """
+        logger.debug("Mistral generate_stream uses buffered output, not true streaming")
         # Use non-streaming generate and yield tokens
         output = self.generate(
             loaded_model=loaded_model,
