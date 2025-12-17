@@ -6,7 +6,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, cast
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,6 +35,28 @@ from ..utils.metrics import (
 from ..utils.serialization import serialize_hidden_states, tensor_to_base64, tensor_to_list
 
 logger = logging.getLogger(__name__)
+
+
+def _expand_hidden_state_layers(
+    layers: list[int] | str,
+    num_layers: int,
+) -> list[int]:
+    """Expand hidden_state_layers to a concrete list of layer indices.
+
+    Args:
+        layers: Either a list of layer indices, or "all" for every layer
+        num_layers: Total number of layers in the model
+
+    Returns:
+        List of layer indices (using negative indexing)
+    """
+    if isinstance(layers, str):
+        if layers.lower() == "all":
+            # Return all layers as negative indices: [-num_layers, ..., -1]
+            return list(range(-num_layers, 0))
+        else:
+            raise ValueError(f"Unknown layer specification: {layers}. Use 'all' or a list of indices.")
+    return layers
 
 
 def _serialize_sequence_hidden_states(
@@ -104,8 +126,9 @@ class GenerateRequest(BaseModel):
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Sampling temperature")
     top_p: float = Field(default=0.9, ge=0.0, le=1.0, description="Nucleus sampling probability")
     return_hidden_states: bool = Field(default=True, description="Return hidden states")
-    hidden_state_layers: list[int] = Field(
-        default=[-1], description="Which layers to return (-1 = last)"
+    hidden_state_layers: list[int] | str = Field(
+        default=[-1],
+        description="Which layers to return: list of indices (-1 = last), or 'all' for every layer",
     )
     return_attention: bool = Field(default=False, description="Return attention weights")
     return_full_sequence: bool = Field(
@@ -163,8 +186,9 @@ class StreamingGenerateRequest(BaseModel):
     return_hidden_states: bool = Field(
         default=False, description="Return hidden states in final event"
     )
-    hidden_state_layers: list[int] = Field(
-        default=[-1], description="Which layers to return (-1 = last)"
+    hidden_state_layers: list[int] | str = Field(
+        default=[-1],
+        description="Which layers to return: list of indices (-1 = last), or 'all' for every layer",
     )
     hidden_state_format: str = Field(
         default="list", description="Format for hidden states: list or base64"
@@ -181,8 +205,9 @@ class BatchGenerateRequest(BaseModel):
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Sampling temperature")
     top_p: float = Field(default=0.9, ge=0.0, le=1.0, description="Nucleus sampling probability")
     return_hidden_states: bool = Field(default=False, description="Return hidden states")
-    hidden_state_layers: list[int] = Field(
-        default=[-1], description="Which layers to return (-1 = last)"
+    hidden_state_layers: list[int] | str = Field(
+        default=[-1],
+        description="Which layers to return: list of indices (-1 = last), or 'all' for every layer",
     )
     hidden_state_format: str = Field(
         default="list", description="Format for hidden states: list or base64"
@@ -704,6 +729,12 @@ def create_http_app(config: Config | None = None) -> FastAPI:
                 loader_name=request.loader,
             )
 
+            # Expand "all" to full layer list if needed
+            hidden_state_layers = _expand_hidden_state_layers(
+                request.hidden_state_layers,
+                loaded.num_layers,
+            )
+
             # Generate using registry (uses appropriate loader for model)
             output = registry.generate(
                 loaded_model=loaded,
@@ -712,7 +743,7 @@ def create_http_app(config: Config | None = None) -> FastAPI:
                 temperature=request.temperature,
                 top_p=request.top_p,
                 return_hidden_states=request.return_hidden_states,
-                hidden_state_layers=request.hidden_state_layers,
+                hidden_state_layers=hidden_state_layers,
                 return_attention=request.return_attention,
                 return_full_sequence=request.return_full_sequence,
             )
@@ -743,11 +774,15 @@ def create_http_app(config: Config | None = None) -> FastAPI:
                 )
 
             # Serialize full sequence hidden states for manifold analysis
-            sequence_hidden_states_response = None
+            sequence_hidden_states_response: dict[str, SequenceHiddenStateResponse] | None = None
             if output.sequence_hidden_states:
-                sequence_hidden_states_response = _serialize_sequence_hidden_states(
-                    output.sequence_hidden_states,
-                    format=request.hidden_state_format,
+                # Pydantic will coerce the dict to SequenceHiddenStateResponse at validation
+                sequence_hidden_states_response = cast(
+                    dict[str, SequenceHiddenStateResponse],
+                    _serialize_sequence_hidden_states(
+                        output.sequence_hidden_states,
+                        format=request.hidden_state_format,
+                    ),
                 )
 
             return GenerateResponse(
@@ -879,6 +914,12 @@ def create_http_app(config: Config | None = None) -> FastAPI:
                     loader_name=request.loader,
                 )
 
+                # Expand "all" to full layer list if needed
+                hidden_state_layers = _expand_hidden_state_layers(
+                    request.hidden_state_layers,
+                    loaded.num_layers,
+                )
+
                 # Stream tokens
                 for item in registry.generate_stream(
                     loaded_model=loaded,
@@ -887,7 +928,7 @@ def create_http_app(config: Config | None = None) -> FastAPI:
                     temperature=request.temperature,
                     top_p=request.top_p,
                     return_hidden_states=request.return_hidden_states,
-                    hidden_state_layers=request.hidden_state_layers,
+                    hidden_state_layers=hidden_state_layers,
                 ):
                     if isinstance(item, StreamingToken):
                         # Send token event
@@ -961,6 +1002,12 @@ def create_http_app(config: Config | None = None) -> FastAPI:
                 loader_name=request.loader,
             )
 
+            # Expand "all" to full layer list if needed
+            hidden_state_layers = _expand_hidden_state_layers(
+                request.hidden_state_layers,
+                loaded.num_layers,
+            )
+
             # Process each prompt
             for prompt in request.prompts:
                 output = registry.generate(
@@ -970,7 +1017,7 @@ def create_http_app(config: Config | None = None) -> FastAPI:
                     temperature=request.temperature,
                     top_p=request.top_p,
                     return_hidden_states=request.return_hidden_states,
-                    hidden_state_layers=request.hidden_state_layers,
+                    hidden_state_layers=hidden_state_layers,
                 )
 
                 # Serialize hidden states if present

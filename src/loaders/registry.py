@@ -4,7 +4,7 @@ The registry manages multiple loaders and automatically selects the best
 loader for each model based on:
 1. Explicit configuration (model_overrides in config)
 2. Loader can_load() checks (pattern matching)
-3. Fallback chain (transformers -> sentence_transformers -> custom)
+3. Fallback chain (mistral -> qwen -> transformers -> sentence_transformers -> custom)
 
 This enables seamless loading of diverse models without manual loader selection.
 """
@@ -52,17 +52,19 @@ class LoaderRegistry:
         loader_configs: dict[str, dict[str, Any]] | None = None,
         custom_model_configs: dict[str, CustomModelConfig] | None = None,
     ):
-        """
-        Create a LoaderRegistry and initialize default model loaders and their fallback order.
-        
-        Initializes per-model loader overrides, constructs the default loaders in priority order
-        (`transformers`, `sentence_transformers`, `custom`), and sets the fallback order used for
-        auto-detection. Logs the initialized loader names.
-        
-        Parameters:
-            loader_configs: Optional mapping of model IDs to loader-specific configuration overrides
-                (e.g. {"model-id": {"loader": "transformers", "dtype": "float16"}}).
-            custom_model_configs: Optional configuration data passed to the CustomLoader for custom models.
+        """Initialize the registry with configured loaders.
+
+        Loaders are checked in priority order:
+        1. mistral - Specialized loader for Mistral models
+        2. qwen - Specialized loader for Qwen models
+        3. transformers - General HuggingFace transformers (~80% of models)
+        4. sentence_transformers - Embedding models (BGE, E5, SBERT)
+        5. custom - Edge cases and research models
+
+        Args:
+            loader_configs: Per-model loader configuration overrides
+                Example: {"model-id": {"loader": "transformers", "dtype": "float16"}}
+            custom_model_configs: Custom model configurations for CustomLoader
         """
         self.loader_configs = loader_configs or {}
 

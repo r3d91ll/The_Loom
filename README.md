@@ -66,6 +66,11 @@ Generate text with hidden state extraction.
 }
 ```
 
+**hidden_state_layers options:**
+- `[-1]` - Last layer only (default, semantic representation)
+- `[-1, -2, -3]` - Specific layers (negative indices from end)
+- `"all"` - Every layer in the model (for layer-wise analysis)
+
 **Response:**
 
 ```json
@@ -144,7 +149,7 @@ Check which loader would handle a model without loading it.
 ### Docker (Recommended)
 
 ```bash
-# Basic usage
+# Basic usage (lazy loading - models load on first request)
 docker run -d --gpus all -p 8080:8080 tbucy/loom:latest
 
 # With persistent model cache (recommended)
@@ -164,6 +169,33 @@ docker run -d --gpus all -p 8080:8080 \
   tbucy/loom:latest
 ```
 
+### Cloud Deployment with Preloaded Model
+
+For cloud deployments (RunPod, Lambda Labs, AWS, etc.), preload your model at startup so it's ready immediately:
+
+```bash
+# Preload a specific model at container startup
+docker run -d --gpus all -p 8080:8080 \
+  -v ~/.cache/huggingface:/app/.cache/huggingface \
+  tbucy/loom:latest \
+  sh -c "python -m src.server --host 0.0.0.0 --port 8080 --preload mistralai/Mistral-7B-Instruct-v0.3"
+
+# Preload multiple models (if you have enough VRAM)
+docker run -d --gpus all -p 8080:8080 \
+  -v ~/.cache/huggingface:/app/.cache/huggingface \
+  tbucy/loom:latest \
+  sh -c "python -m src.server --host 0.0.0.0 --port 8080 \
+    --preload mistralai/Mistral-7B-Instruct-v0.3 \
+    --preload BAAI/bge-small-en-v1.5"
+
+# With quantization for larger models on limited VRAM
+docker run -d --gpus all -p 8080:8080 \
+  -e HF_TOKEN=your_token_here \
+  -v ~/.cache/huggingface:/app/.cache/huggingface \
+  tbucy/loom:latest \
+  sh -c "python -m src.server --host 0.0.0.0 --port 8080 --preload meta-llama/Llama-3.1-8B-Instruct"
+```
+
 ### Docker Compose
 
 ```yaml
@@ -177,6 +209,33 @@ services:
       - LOOM_DEFAULT_DEVICE=cuda:0
     volumes:
       - ~/.cache/huggingface:/app/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+```
+
+**Docker Compose with preloaded model:**
+
+```yaml
+services:
+  loom:
+    image: tbucy/loom:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - LOOM_MAX_MODELS=1
+      - LOOM_DEFAULT_DEVICE=cuda:0
+      - HF_TOKEN=${HF_TOKEN}  # For gated models
+    volumes:
+      - ~/.cache/huggingface:/app/.cache/huggingface
+    # Override command to preload model at startup
+    command: >
+      sh -c "python -m src.server --host 0.0.0.0 --port 8080
+      --preload mistralai/Mistral-7B-Instruct-v0.3"
     deploy:
       resources:
         reservations:
@@ -233,6 +292,51 @@ response = client.post("/generate", json={
 ```
 
 > **Note:** Unix socket transport is only available for local/source installs. Docker deployments use HTTP.
+
+## Model Loading
+
+Unlike vLLM which requires declaring a model at startup, The Loom supports **both** approaches:
+
+### Preload at Startup (vLLM-style)
+
+```bash
+# CLI: Preload specific model(s) before accepting requests
+poetry run loom --preload meta-llama/Llama-3.1-8B-Instruct
+
+# Multiple models
+poetry run loom --preload mistralai/Mistral-7B-Instruct-v0.3 --preload BAAI/bge-small-en-v1.5
+
+# Docker: Override CMD to preload
+docker run -d --gpus all -p 8080:8080 \
+  -v ~/.cache/huggingface:/app/.cache/huggingface \
+  tbucy/loom:latest \
+  sh -c "python -m src.server --preload meta-llama/Llama-3.1-8B-Instruct"
+```
+
+### Lazy Load on Demand (Default)
+
+Models are loaded automatically on first request. This is useful for:
+- Multi-model workflows where you don't know which models you'll need
+- Memory-constrained environments (only load what you use)
+- Development and experimentation
+
+```bash
+# Start server with no models loaded
+poetry run loom --port 8080
+
+# First request to a model triggers loading
+curl -X POST http://localhost:8080/generate \
+  -d '{"model": "mistralai/Mistral-7B-Instruct-v0.3", "prompt": "Hello"}'
+```
+
+### LRU Model Eviction
+
+The Loom maintains up to `LOOM_MAX_MODELS` in memory (default: 3). When the limit is reached, the least-recently-used model is evicted to make room for new ones.
+
+```bash
+# Allow more models in memory
+LOOM_MAX_MODELS=5 poetry run loom
+```
 
 ## Configuration
 
