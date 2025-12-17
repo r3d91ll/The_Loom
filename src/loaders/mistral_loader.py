@@ -400,17 +400,27 @@ class MistralLoader(ModelLoader):
         load_time = time.time() - start_time
         model_type = getattr(config, "model_type", "unknown")
 
+        # Determine actual device after loading (device_map="auto" may distribute model)
+        device_map = getattr(model, "hf_device_map", None)
+        if device_map and isinstance(device_map, dict):
+            # Model is distributed; use first device as primary
+            first_device = next(iter(device_map.values()))
+            actual_device = torch.device(first_device)
+            logger.debug(f"Model distributed across devices: {device_map}")
+        else:
+            actual_device = torch_device
+
         logger.info(
             f"Mistral model loaded in {load_time:.2f}s - "
             f"hidden_size={hidden_size}, num_layers={num_layers}, "
-            f"model_type={model_type}"
+            f"model_type={model_type}, device={actual_device}"
         )
 
         return LoadedModel(
             model=model,
             tokenizer=tokenizer,
             model_id=model_id,
-            device=torch_device,
+            device=actual_device,
             dtype=torch_dtype,
             hidden_size=hidden_size,
             num_layers=num_layers,
@@ -421,6 +431,7 @@ class MistralLoader(ModelLoader):
                 "model_type": model_type,
                 "is_fp8": is_fp8,
                 "uses_mistral_tokenizer": isinstance(tokenizer, MistralTokenizerWrapper),
+                "device_map": getattr(model, "hf_device_map", None),
             },
         )
 

@@ -155,16 +155,28 @@ class TransformersLoader(ModelLoader):
         num_layers = getattr(config, "num_hidden_layers", getattr(config, "n_layer", 32))
 
         load_time = time.time() - start_time
+
+        # Determine actual device after loading (device_map="auto" may distribute model)
+        device_map = getattr(model, "hf_device_map", None)
+        if device_map and isinstance(device_map, dict):
+            # Model is distributed; use first device as primary
+            first_device = next(iter(device_map.values()))
+            actual_device = torch.device(first_device)
+            logger.debug(f"Model distributed across devices: {device_map}")
+        else:
+            actual_device = torch_device
+
         logger.info(
             f"Model loaded in {load_time:.2f}s - "
-            f"hidden_size={hidden_size}, num_layers={num_layers}, quant={quant_info}"
+            f"hidden_size={hidden_size}, num_layers={num_layers}, "
+            f"quant={quant_info}, device={actual_device}"
         )
 
         return LoadedModel(
             model=model,
             tokenizer=tokenizer,
             model_id=model_id,
-            device=torch_device,
+            device=actual_device,
             dtype=torch_dtype,
             hidden_size=hidden_size,
             num_layers=num_layers,
@@ -174,6 +186,7 @@ class TransformersLoader(ModelLoader):
                 "trust_remote_code": trust_remote_code,
                 "model_type": getattr(config, "model_type", "unknown"),
                 "quantization": quant_info,
+                "device_map": getattr(model, "hf_device_map", None),
             },
         )
 
