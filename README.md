@@ -193,6 +193,43 @@ poetry install
 poetry run loom --port 8080
 ```
 
+#### Transport Options (Local Install)
+
+When running from source, The Loom supports multiple transport modes:
+
+```bash
+# HTTP server (default) - accessible over network
+poetry run loom --transport http --port 8080
+
+# Unix socket - faster IPC for local applications
+poetry run loom --transport unix --unix-socket /tmp/loom.sock
+
+# Both HTTP and Unix socket simultaneously
+poetry run loom --transport both --port 8080 --unix-socket /tmp/loom.sock
+```
+
+**When to use Unix sockets:**
+- Local applications on the same machine (lower latency than HTTP)
+- High-frequency requests from co-located processes
+- Pipelines where The Loom runs alongside your analysis code
+
+**Connecting via Unix socket (Python):**
+```python
+import httpx
+
+# Using httpx with Unix socket transport
+transport = httpx.HTTPTransport(uds="/tmp/loom.sock")
+client = httpx.Client(transport=transport, base_url="http://localhost")
+
+response = client.post("/generate", json={
+    "model": "mistralai/Mistral-7B-Instruct-v0.3",
+    "prompt": "Hello world",
+    "return_hidden_states": True,
+})
+```
+
+> **Note:** Unix socket transport is only available for local/source installs. Docker deployments use HTTP.
+
 ## Configuration
 
 Environment variables:
