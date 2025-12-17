@@ -60,10 +60,14 @@ def extract_hidden_states(
     results: dict[int, HiddenStateResult] = {}
 
     for layer_idx, tensor in hidden_states_dict.items():
-        # Convert to numpy
+        # Convert to numpy (convert bfloat16 to float32 first since numpy doesn't support bf16)
         if isinstance(tensor, torch.Tensor):
-            vector = tensor.cpu().numpy()
-            dtype_str = str(tensor.dtype).replace("torch.", "")
+            if tensor.dtype == torch.bfloat16:
+                vector = tensor.cpu().float().numpy()
+                dtype_str = "float32"
+            else:
+                vector = tensor.cpu().numpy()
+                dtype_str = str(tensor.dtype).replace("torch.", "")
         else:
             vector = np.array(tensor)
             dtype_str = str(vector.dtype)
