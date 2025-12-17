@@ -64,8 +64,8 @@ COPY --chown=loom:loom src/ ./src/
 COPY --chown=loom:loom config/ ./config/
 COPY --chown=loom:loom pyproject.toml README.md ./
 
-# Install the package itself
-RUN pip install --no-cache-dir -e .
+# Install the package
+RUN pip install --no-cache-dir .
 
 # =============================================================================
 # Configuration
@@ -96,5 +96,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:${LOOM_PORT}/health || exit 1
 
-# Default command
-CMD ["python", "-m", "src.server", "--host", "0.0.0.0", "--port", "8080"]
+# Default command (uses LOOM_PORT env var)
+CMD ["sh", "-c", "python -m src.server --host 0.0.0.0 --port ${LOOM_PORT}"]
