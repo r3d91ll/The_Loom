@@ -587,38 +587,57 @@ class TestOutputFormat:
             import base64
             decoded = base64.b64decode(layer_data["data"])
 
+            # Map dtype string to bytes per element
+            dtype_to_bytes = {
+                "float16": 2,
+                "float32": 4,
+                "float64": 8,
+                "bfloat16": 2,
+            }
+            dtype_str = layer_data["dtype"].replace("torch.", "")
+            bytes_per_element = dtype_to_bytes.get(dtype_str, 4)  # default float32
+
             # Validate size matches shape
-            import struct
-            expected_floats = 1
+            expected_elements = 1
             for dim in layer_data["shape"]:
-                expected_floats *= dim
-            expected_bytes = expected_floats * 4  # float32
+                expected_elements *= dim
+            expected_bytes = expected_elements * bytes_per_element
             assert len(decoded) == expected_bytes
 
             print("\n=== Base64 Format Validation ===")
             print(f"Shape: {layer_data['shape']}")
+            print(f"Dtype: {dtype_str} ({bytes_per_element} bytes/element)")
             print(f"Encoded length: {len(layer_data['data'])} chars")
             print(f"Decoded bytes: {len(decoded)}")
             print(f"Expected bytes: {expected_bytes}")
             print(f"Decoding: OK")
 
+            # Map dtype for numpy
+            numpy_dtype = {
+                "float16": "np.float16",
+                "float32": "np.float32",
+                "float64": "np.float64",
+                "bfloat16": "np.float16",  # numpy doesn't have bfloat16, use float16
+            }.get(dtype_str, "np.float32")
+
             # Save example
             example = {
                 "format": "base64",
                 "shape": layer_data["shape"],
-                "dtype": layer_data["dtype"],
+                "dtype": dtype_str,
+                "bytes_per_element": bytes_per_element,
                 "encoded_sample": layer_data["data"][:100] + "...",
                 "decoding_instructions": [
                     "1. Base64 decode the 'data' field",
-                    "2. Interpret as float32 array",
+                    f"2. Interpret as {dtype_str} array ({bytes_per_element} bytes/element)",
                     "3. Reshape according to 'shape' field",
                 ],
-                "python_example": """
+                "python_example": f"""
 import base64
 import numpy as np
 
 decoded = base64.b64decode(layer_data['data'])
-array = np.frombuffer(decoded, dtype=np.float32)
+array = np.frombuffer(decoded, dtype={numpy_dtype})
 array = array.reshape(layer_data['shape'])
 """.strip(),
             }
