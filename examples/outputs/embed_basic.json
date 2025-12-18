@@ -399,7 +399,7 @@
       "pooling": "sentence_transformer_default",
       "inference_time_ms": 187.2544288635254,
       "model_id": "BAAI/bge-small-en-v1.5",
-      "normalized": false
+      "normalized": true
     }
   },
   "validation": {
