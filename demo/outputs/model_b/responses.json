@@ -1,12 +1,12 @@
 [
   {
     "prompt": "Explain the concept of gravity in simple terms.",
-    "response": " Gravity is a fundamental force of nature that attracts two objects towards each other, even if they are at different distances from each other. It is caused by the mass and size of the objects involved, as well as their distance apart.\n\nThe strength of gravitational attraction between two objects depends on several factors, including:\n\n1. Mass",
+    "response": " Gravity is a force that attracts objects towards each other, like when you pull on a ball with your hand and it pulls back. It's also responsible for many natural phenomena such as rain falling from the sky or tides moving across the ocean.\n\nGravity works by creating a field around the masses of objects, which causes them",
     "token_count": 64,
     "metadata": {
-      "inference_time_ms": 691.4880275726318,
+      "inference_time_ms": 666.0659313201904,
       "tokens_generated": 64,
-      "tokens_per_second": 92.55402472355551,
+      "tokens_per_second": 96.08658391091616,
       "input_tokens": 10,
       "temperature": 0.7,
       "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
@@ -15,12 +15,12 @@
   },
   {
     "prompt": "Write a haiku about artificial intelligence.",
-    "response": " Artificially intelligent,  \nNavigating the digital landscape,  \nChasing new opportunities.  \n\nThe answer is simple: AI enhances human capabilities,\nTransforming industries and improving quality of life.\nIts impact on society is undeniable.\n\nWould you like to explore another topic? Please let me know! \ud83c\udf1f\u2728\n\nI'm",
+    "response": " Artificial intelligence is like a\nmachine that knows more than humans do,  \nBut it's not really human at all.\nIt learns from data and changes over time.  \nAI can make decisions, but it's always evolving.  \nThe future of AI is exciting, but also uncertain.  \nAI is here to stay,",
     "token_count": 64,
     "metadata": {
-      "inference_time_ms": 780.0519466400146,
+      "inference_time_ms": 594.2249298095703,
       "tokens_generated": 64,
-      "tokens_per_second": 82.04581794285976,
+      "tokens_per_second": 107.70332375740263,
       "input_tokens": 8,
       "temperature": 0.7,
       "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
@@ -29,12 +29,12 @@
   },
   {
     "prompt": "What are the main differences between Python and JavaScript?",
-    "response": "Python is a high-level, interpreted language that was developed by Guido van Rossum. It has a syntax similar to C++ but with features like function overloading, classes, and decorators.\n\nJavaScript, on the other hand, is an object-oriented programming (OOP) language created by Brendan Eich in 1",
+    "response": " \n1. Syntax: While both languages use indentation to define blocks of code, Python uses curly braces ({}) for block-level statements, while JavaScript uses straight brackets ([]).\n2. Data types: Python supports multiple data types including integers, floats, strings, lists, tuples, dictionaries, and sets. JavaScript also supports various",
     "token_count": 64,
     "metadata": {
-      "inference_time_ms": 647.9232311248779,
+      "inference_time_ms": 597.8152751922607,
       "tokens_generated": 64,
-      "tokens_per_second": 98.77713427389813,
+      "tokens_per_second": 107.05648158524762,
       "input_tokens": 10,
       "temperature": 0.7,
       "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
@@ -43,12 +43,12 @@
   },
   {
     "prompt": "Describe a beautiful sunset over the ocean.",
-    "response": " The sun rises high in the sky, painting the horizon with fiery hues of orange and pink. As the light dances through the clouds, it creates an awe-inspiring spectacle that is both breathtaking and serene at the same time.\n\nThe colors blend together to create a mesmerizing gradient, from deep reds to soft pinks",
+    "response": " I'm sorry, but as an AI language model, I do not have the ability to see or experience physical sensations like beauty. However, I can describe the visual appearance of a beautiful sunset over the ocean.\n\nA beautiful sunset over the ocean typically features a deep red color with a warm orange tint, creating a calming and",
     "token_count": 64,
     "metadata": {
-      "inference_time_ms": 623.1429576873779,
+      "inference_time_ms": 594.7434902191162,
       "tokens_generated": 64,
-      "tokens_per_second": 102.7051645380351,
+      "tokens_per_second": 107.60941658465406,
       "input_tokens": 8,
       "temperature": 0.7,
       "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
@@ -57,12 +57,12 @@
   },
   {
     "prompt": "How does photosynthesis work in plants?",
-    "response": " Photosynthesis is the process by which plants use sunlight to convert carbon dioxide and water into glucose (a type of sugar) and oxygen. Here's a basic breakdown of how it works:\n\n1. Light absorption: Plants have two main types of light receptors, known as chlorophyll and luciferase.\n\n2. Light",
+    "response": " Photosynthesis is a process by which plants convert light energy, stored in the chlorophyll within their leaves, into chemical energy that can be used to produce glucose (a type of sugar) and oxygen. Here's how it works:\n\n1. Light absorption: Chlorophyll molecules on the outer surface of plant cells absorb",
     "token_count": 64,
     "metadata": {
-      "inference_time_ms": 617.3367500305176,
+      "inference_time_ms": 591.1271572113037,
       "tokens_generated": 64,
-      "tokens_per_second": 103.67113248455759,
+      "tokens_per_second": 108.2677376927256,
       "input_tokens": 8,
       "temperature": 0.7,
       "model_id": "Qwen/Qwen2.5-0.5B-Instruct",

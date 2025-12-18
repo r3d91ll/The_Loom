@@ -11,27 +11,27 @@
 
 | Metric | TinyLlama 1.1B | Qwen2.5 0.5B |
 |--------|--------------|---------------|
-| Mean D_eff | 724.60 | 237.45 |
-| D_eff Std | 189.80 | 58.69 |
-| Min D_eff | 10.00 | 139.00 |
-| Max D_eff | 900.00 | 380.00 |
-| Peak D_eff Layer | -2 | -4 |
-| Mean β | 9.459 | 4.010 |
-| β Std | 34.010 | 0.989 |
+| Mean D_eff | 732.46 | 245.18 |
+| D_eff Std | 190.49 | 45.64 |
+| Min D_eff | 10.00 | 162.00 |
+| Max D_eff | 900.00 | 369.00 |
+| Peak D_eff Layer | -2 | -24 |
+| Mean β | 9.427 | 3.780 |
+| β Std | 34.016 | 0.688 |
 
 ## Interpretation
 
 ### D_eff (Effective Dimensionality)
 - **Higher is better** (more semantic richness)
 - Quality threshold: ≥20 for meaningful representations
-- TinyLlama 1.1B: PASSES threshold (mean=724.60)
-- Qwen2.5 0.5B: PASSES threshold (mean=237.45)
+- TinyLlama 1.1B: PASSES threshold (mean=732.46)
+- Qwen2.5 0.5B: PASSES threshold (mean=245.18)
 
 ### β (Collapse Indicator)
 - **Lower is better** (less dimensional collapse)
 - Warning threshold: < 2.0
-- TinyLlama 1.1B: WARNING - above threshold (mean=9.459)
-- Qwen2.5 0.5B: WARNING - above threshold (mean=4.010)
+- TinyLlama 1.1B: WARNING - above threshold (mean=9.427)
+- Qwen2.5 0.5B: WARNING - above threshold (mean=3.780)
 
 ## Visualizations
 
