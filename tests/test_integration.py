@@ -43,7 +43,10 @@ def examples_dir():
 
 @pytest.fixture(scope="module")
 def app_client():
-    """Create test client with real model loading."""
+    """Create test client with real model loading.
+
+    Cleanup is handled in fixture teardown to avoid relying on test execution order.
+    """
     from fastapi.testclient import TestClient
     from src.transport.http import create_http_app
     from src.config import Config
@@ -53,6 +56,20 @@ def app_client():
 
     with TestClient(app) as client:
         yield client
+
+        # Teardown: unload all models after tests complete
+        print("\n=== Fixture Cleanup: Unloading Models ===")
+        try:
+            response = client.get("/models")
+            if response.status_code == 200:
+                data = response.json()
+                for model in data.get("loaded_models", []):
+                    model_id = model["model_id"].replace("/", "--")
+                    client.delete(f"/models/{model_id}")
+                    print(f"  Unloaded: {model['model_id']}")
+            print("=== Cleanup Complete ===")
+        except Exception as e:
+            print(f"  Cleanup warning: {e}")
 
 
 class TestHealthAndSetup:
@@ -645,13 +662,3 @@ array = array.reshape(layer_data['shape'])
                 json.dump(example, f, indent=2)
 
 
-def test_cleanup(app_client):
-    """Final cleanup - unload all models."""
-    response = app_client.get("/models")
-    data = response.json()
-
-    for model in data.get("loaded_models", []):
-        model_id = model["model_id"].replace("/", "--")
-        app_client.delete(f"/models/{model_id}")
-
-    print("\n=== Cleanup Complete ===")
