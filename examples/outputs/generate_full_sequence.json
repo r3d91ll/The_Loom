@@ -1,0 +1,14 @@
+{
+  "request": {
+    "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+    "return_full_sequence": true
+  },
+  "response": {
+    "shape": [
+      5,
+      2048
+    ],
+    "interpretation": "5 tokens \u00d7 2048 hidden dimensions",
+    "use_case": "Manifold/boundary object analysis - track semantic evolution across tokens"
+  }
+}

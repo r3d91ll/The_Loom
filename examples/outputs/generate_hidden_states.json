@@ -1,0 +1,61 @@
+{
+  "request": {
+    "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+    "prompt": "The meaning of life is",
+    "max_tokens": 20,
+    "temperature": 0.7,
+    "return_hidden_states": true,
+    "hidden_state_layers": [
+      -1
+    ]
+  },
+  "response": {
+    "text": "to have fun, while having fun you are having too much fun. - Theodore Geisel",
+    "token_count": 20,
+    "hidden_states": {
+      "-1": {
+        "shape": [
+          1,
+          2048
+        ],
+        "dtype": "float16",
+        "data_preview": [
+          1.6015625,
+          0.59375,
+          -1.21484375,
+          5.28515625,
+          1.337890625,
+          -2.666015625,
+          0.81494140625,
+          -1.5966796875,
+          -0.1585693359375,
+          -1.1171875,
+          1.14453125,
+          0.9814453125,
+          -0.61083984375,
+          1.7861328125,
+          0.337646484375,
+          -6.76171875,
+          0.56005859375,
+          -0.9375,
+          -3.55078125,
+          -0.92431640625
+        ],
+        "data_length": 2048
+      }
+    },
+    "metadata": {
+      "inference_time_ms": 509.13143157958984,
+      "tokens_generated": 20,
+      "tokens_per_second": 39.28258748030862,
+      "input_tokens": 6,
+      "temperature": 0.7,
+      "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "full_sequence": false
+    }
+  },
+  "validation": {
+    "hidden_size_matches": true,
+    "expected_hidden_size": 2048
+  }
+}

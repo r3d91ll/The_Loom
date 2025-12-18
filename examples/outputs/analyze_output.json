@@ -1,0 +1,23 @@
+{
+  "shape": [
+    384
+  ],
+  "layer": -1,
+  "dtype": "torch.float32",
+  "mean": 0.00037766294553875923,
+  "std": 0.051029641181230545,
+  "min": -0.2783616781234741,
+  "max": 0.3189884126186371,
+  "l2_norm": 1.0,
+  "sparsity": 0.0,
+  "percentile_25": -0.027067977003753185,
+  "percentile_50": -0.0032971681794151664,
+  "percentile_75": 0.026416456792503595,
+  "embedding_shape": [
+    384
+  ],
+  "pooling": "sentence_transformer_default",
+  "inference_time_ms": 4.257440567016602,
+  "model_id": "BAAI/bge-small-en-v1.5",
+  "normalized": false
+}
