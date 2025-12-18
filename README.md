@@ -513,16 +513,68 @@ array = array.reshape(layer_data['shape'])
 
 See `examples/outputs/` for complete sample responses from integration tests.
 
+## Device Support
+
+### Currently Supported
+
+| Device Configuration | Status | Notes |
+|---------------------|--------|-------|
+| Single GPU | ✅ Full | Default `cuda:0`, specify others via `device` parameter |
+| CPU Fallback | ✅ Auto | Falls back to CPU if no CUDA available |
+| Specific GPU | ✅ Full | Use `device: "cuda:1"` in load request |
+| Multi-GPU (quantized) | ✅ Auto | 4bit/8bit models auto-distribute via `device_map="auto"` |
+
+**Examples:**
+
+```bash
+# Single GPU (default)
+curl -X POST http://localhost:8080/models/load \
+  -H "Content-Type: application/json" \
+  -d '{"model": "mistralai/Mistral-7B-Instruct-v0.3"}'
+
+# Specific GPU
+curl -X POST http://localhost:8080/models/load \
+  -H "Content-Type: application/json" \
+  -d '{"model": "mistralai/Mistral-7B-Instruct-v0.3", "device": "cuda:1"}'
+
+# Multi-GPU with quantization (auto-distributes)
+curl -X POST http://localhost:8080/models/load \
+  -H "Content-Type: application/json" \
+  -d '{"model": "meta-llama/Llama-3.1-70B-Instruct", "quantization": "4bit"}'
+```
+
+### Not Currently Supported
+
+| Feature | Status | Reason |
+|---------|--------|--------|
+| Multi-GPU (non-quantized) | ❌ | No tensor parallelism - full model on single GPU |
+| Pipeline parallelism | ❌ | Not implemented |
+| Explicit device_map control | ❌ | API doesn't expose HuggingFace device_map strategies |
+| Multi-node inference | ❌ | Single-machine only |
+
 ## Known Limitations
 
 **This is a research tool, not a production inference server.**
 
 - **Throughput**: Optimized for hidden state access, not maximum tokens/second
 - **Concurrency**: Single-request processing (no batched inference across requests)
-- **Memory**: Models loaded fully into GPU memory (no tensor parallelism)
+- **Memory**: Non-quantized models load fully into single GPU (no tensor parallelism)
 - **Chat Templates**: Raw prompts only - apply chat templates client-side if needed
 
 For production inference without hidden states, use vLLM, TGI, or similar.
+
+## Roadmap
+
+Features under consideration for future releases:
+
+- [ ] **Explicit device_map control** - Expose HuggingFace device_map strategies (`auto`, `balanced`, `sequential`)
+- [ ] **Tensor parallelism** - Distribute large non-quantized models across multiple GPUs
+- [ ] **Chat template support** - Apply model-specific chat templates server-side
+- [ ] **Concurrent request handling** - Process multiple requests in parallel
+- [ ] **OpenAI-compatible API** - `/v1/completions` endpoint for drop-in compatibility
+- [ ] **Attention weight extraction** - Return attention patterns alongside hidden states
+
+Want to contribute? See [CONTRIBUTING.md](CONTRIBUTING.md) or open an issue.
 
 ## Use Cases
 
