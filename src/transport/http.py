@@ -59,6 +59,69 @@ def _expand_hidden_state_layers(
     return layers
 
 
+def _apply_chat_template(
+    messages: list[dict[str, str]],
+    tokenizer: Any,
+    model_id: str,
+) -> str:
+    """Apply chat template to convert messages to a prompt string.
+
+    This is the critical bridge between OpenAI-style chat format and
+    raw prompt format. Uses the tokenizer's built-in chat template
+    if available, otherwise falls back to a simple concatenation.
+
+    Args:
+        messages: List of {"role": str, "content": str} dicts
+        tokenizer: HuggingFace tokenizer with optional chat_template
+        model_id: Model identifier for logging
+
+    Returns:
+        Formatted prompt string ready for generation
+    """
+    # Check if tokenizer has chat template support
+    if hasattr(tokenizer, "apply_chat_template"):
+        try:
+            # Convert Pydantic models to dicts if needed
+            msg_dicts = [
+                {"role": m["role"], "content": m["content"]}
+                if isinstance(m, dict)
+                else {"role": m.role, "content": m.content}
+                for m in messages
+            ]
+
+            prompt: str = tokenizer.apply_chat_template(
+                msg_dicts,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+            logger.debug(f"Applied chat template for {model_id}")
+            return prompt
+        except Exception as e:
+            logger.warning(
+                f"Chat template failed for {model_id}: {e}. Falling back to simple format."
+            )
+
+    # Fallback: Simple concatenation for models without chat templates
+    # This handles base models and older models
+    parts = []
+    for m in messages:
+        role = m["role"] if isinstance(m, dict) else m.role
+        content = m["content"] if isinstance(m, dict) else m.content
+
+        if role == "system":
+            parts.append(f"System: {content}\n\n")
+        elif role == "user":
+            parts.append(f"User: {content}\n\n")
+        elif role == "assistant":
+            parts.append(f"Assistant: {content}\n\n")
+        else:
+            parts.append(f"{role}: {content}\n\n")
+
+    # Add generation prompt
+    parts.append("Assistant:")
+    return "".join(parts)
+
+
 def _serialize_sequence_hidden_states(
     sequence_hidden_states: dict[int, Any],
     format: str = "list",
@@ -266,6 +329,84 @@ class HealthResponse(BaseModel):
     model_loaded: str | None
     gpu_info: dict[str, Any]
     config: dict[str, Any]
+
+
+# ============================================================================
+# OpenAI-Compatible Chat Completions (for WeaverCode integration)
+# ============================================================================
+
+
+class ChatMessage(BaseModel):
+    """A single chat message with role and content."""
+
+    role: str = Field(..., description="Message role: system, user, or assistant")
+    content: str = Field(..., description="Message content")
+
+
+class ChatCompletionRequest(BaseModel):
+    """OpenAI-compatible chat completion request with hidden state support.
+
+    This endpoint is designed for WeaverCode integration, providing the
+    messages-based API that WeaverCode expects while exposing hidden states
+    for conveyance measurement.
+    """
+
+    model: str = Field(..., description="Model ID (HuggingFace or local path)")
+    messages: list[ChatMessage] = Field(
+        ..., description="List of chat messages", min_length=1
+    )
+    max_tokens: int = Field(
+        default=256, ge=1, le=8192, description="Max tokens to generate"
+    )
+    temperature: float = Field(
+        default=0.7, ge=0.0, le=2.0, description="Sampling temperature"
+    )
+    top_p: float = Field(
+        default=0.9, ge=0.0, le=1.0, description="Nucleus sampling probability"
+    )
+    return_hidden_states: bool = Field(
+        default=True, description="Return hidden states for conveyance measurement"
+    )
+    stream: bool = Field(default=False, description="Stream responses (not yet implemented)")
+    loader: str | None = Field(default=None, description="Force specific loader")
+
+
+class ChatCompletionUsage(BaseModel):
+    """Token usage statistics matching OpenAI format."""
+
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+
+class ChatCompletionHiddenState(BaseModel):
+    """Hidden state in WeaverCode-expected format.
+
+    This is the geometric boundary object - the final hidden state
+    before lm_head projection, representing meaning as geometry.
+    """
+
+    final: list[float] = Field(description="Final layer hidden state vector")
+    shape: list[int] = Field(description="Tensor shape [batch, hidden_dim]")
+    layer: int = Field(default=-1, description="Layer index (-1 = last)")
+    dtype: str = Field(default="float32", description="Data type")
+
+
+class ChatCompletionResponse(BaseModel):
+    """OpenAI-compatible response with hidden state extraction.
+
+    Extends standard chat completion response with hidden_state field
+    for conveyance measurement in WeaverCode.
+    """
+
+    text: str = Field(description="Generated text")
+    usage: ChatCompletionUsage = Field(description="Token usage statistics")
+    hidden_state: ChatCompletionHiddenState | None = Field(
+        default=None, description="Hidden state for conveyance measurement"
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="Generation metadata"
+    )
 
 
 class ModelLoadRequest(BaseModel):
@@ -797,6 +938,147 @@ def create_http_app(config: Config | None = None) -> FastAPI:
         except Exception as e:
             logger.exception(f"Generation failed: {e}")
             raise HTTPException(status_code=500, detail=str(e)) from e
+
+    # ========================================================================
+    # OpenAI-Compatible Chat Completions (WeaverCode Integration)
+    # ========================================================================
+
+    @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
+    async def chat_completions(
+        request: ChatCompletionRequest,
+    ) -> ChatCompletionResponse:
+        """OpenAI-compatible chat completion with hidden state extraction.
+
+        This endpoint is designed for WeaverCode integration, providing:
+        - Chat message format (messages array with role/content)
+        - Chat template application (model-specific formatting)
+        - Hidden state extraction in WeaverCode-expected format
+        - Token usage breakdown (prompt/completion/total)
+
+        The hidden state returned is the "boundary object" - the geometric
+        representation of meaning before lm_head projection. This enables
+        conveyance measurement between AI agents.
+
+        Example request:
+            {
+                "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "messages": [
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": "Hello!"}
+                ],
+                "return_hidden_states": true
+            }
+
+        Example response:
+            {
+                "text": "Hello! How can I help you today?",
+                "usage": {
+                    "prompt_tokens": 45,
+                    "completion_tokens": 12,
+                    "total_tokens": 57
+                },
+                "hidden_state": {
+                    "final": [0.123, -0.456, ...],
+                    "shape": [1, 2048],
+                    "layer": -1,
+                    "dtype": "float16"
+                },
+                "metadata": {...}
+            }
+        """
+        if request.stream:
+            raise HTTPException(
+                status_code=501,
+                detail="Streaming not yet implemented for chat completions. Use stream=false.",
+            )
+
+        start_time = time.perf_counter()
+        try:
+            # Get or load model
+            loaded = model_manager.get_or_load(
+                request.model,
+                loader_name=request.loader,
+            )
+
+            # Apply chat template to convert messages to prompt
+            prompt = _apply_chat_template(
+                request.messages,  # type: ignore[arg-type]
+                loaded.tokenizer,
+                loaded.model_id,
+            )
+
+            # Generate using the existing registry infrastructure
+            output = registry.generate(
+                loaded_model=loaded,
+                prompt=prompt,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+                top_p=request.top_p,
+                return_hidden_states=request.return_hidden_states,
+                hidden_state_layers=[-1],  # WeaverCode only needs final layer
+            )
+
+            # Record metrics
+            gen_latency = time.perf_counter() - start_time
+            record_generation(
+                model=request.model,
+                tokens=len(output.token_ids),
+                latency=gen_latency,
+            )
+
+            # Build usage statistics (WeaverCode-expected format)
+            prompt_tokens = output.metadata.get("input_tokens", 0)
+            completion_tokens = len(output.token_ids)
+            usage = ChatCompletionUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=prompt_tokens + completion_tokens,
+            )
+
+            # Extract hidden state in WeaverCode-expected format
+            hidden_state_response: ChatCompletionHiddenState | None = None
+            if request.return_hidden_states and output.hidden_states:
+                # Get the last layer hidden state
+                final_layer_data = output.hidden_states.get(-1)
+                if final_layer_data is not None:
+                    # Convert to list format
+                    hidden_vector = tensor_to_list(final_layer_data)
+                    hidden_shape = list(final_layer_data.shape)
+
+                    # Determine dtype string
+                    dtype_str = str(final_layer_data.dtype).replace("torch.", "")
+
+                    hidden_state_response = ChatCompletionHiddenState(
+                        final=hidden_vector,
+                        shape=hidden_shape,
+                        layer=-1,
+                        dtype=dtype_str,
+                    )
+
+            return ChatCompletionResponse(
+                text=output.text,
+                usage=usage,
+                hidden_state=hidden_state_response,
+                metadata={
+                    "model": loaded.model_id,
+                    "latency_ms": gen_latency * 1000,
+                    "tokens_per_second": completion_tokens / gen_latency
+                    if gen_latency > 0
+                    else 0,
+                },
+            )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.exception(f"Chat completion failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+    # Alias for convenience (some clients expect /v1/generate)
+    @app.post("/v1/generate", response_model=GenerateResponse)
+    async def generate_v1(request: GenerateRequest) -> GenerateResponse:
+        """Alias for /generate with /v1/ prefix for API consistency."""
+        return await generate(request)
 
     @app.post("/embed", response_model=EmbedResponse)
     async def embed(request: EmbedRequest) -> EmbedResponse:

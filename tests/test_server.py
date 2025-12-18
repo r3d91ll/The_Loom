@@ -320,3 +320,216 @@ class TestRequestValidation:
             )
 
             assert response.status_code == 422
+
+
+class TestChatCompletionsEndpoint:
+    """Tests for /v1/chat/completions endpoint (WeaverCode integration)."""
+
+    def test_chat_completion_basic(
+        self,
+        mock_config,
+        mock_loaded_model,
+        mock_generation_output,
+    ):
+        """Test basic chat completion with messages format."""
+        # Add input_tokens to metadata for usage calculation
+        mock_generation_output.metadata["input_tokens"] = 10
+
+        with patch("src.transport.http.GPUManager"):
+            with patch("src.transport.http.LoaderRegistry") as mock_registry:
+                mock_registry.return_value.load.return_value = mock_loaded_model
+                mock_registry.return_value.generate.return_value = mock_generation_output
+
+                # Mock tokenizer with apply_chat_template
+                mock_loaded_model.tokenizer.apply_chat_template = MagicMock(
+                    return_value="<s>You are helpful.\n\nHello</s>"
+                )
+
+                app = create_http_app(mock_config)
+                client = TestClient(app)
+
+                response = client.post(
+                    "/v1/chat/completions",
+                    json={
+                        "model": "test-model",
+                        "messages": [
+                            {"role": "system", "content": "You are helpful."},
+                            {"role": "user", "content": "Hello"},
+                        ],
+                        "return_hidden_states": True,
+                    },
+                )
+
+                assert response.status_code == 200
+                data = response.json()
+
+                # Check response structure matches WeaverCode expectations
+                assert "text" in data
+                assert data["text"] == "Hello, world!"
+
+                # Check usage breakdown
+                assert "usage" in data
+                assert data["usage"]["prompt_tokens"] == 10
+                assert data["usage"]["completion_tokens"] == 3
+                assert data["usage"]["total_tokens"] == 13
+
+                # Check hidden state in WeaverCode format
+                assert "hidden_state" in data
+                assert data["hidden_state"]["layer"] == -1
+                assert "final" in data["hidden_state"]
+                assert "shape" in data["hidden_state"]
+                assert "dtype" in data["hidden_state"]
+
+    def test_chat_completion_without_hidden_states(
+        self,
+        mock_config,
+        mock_loaded_model,
+    ):
+        """Test chat completion with hidden states disabled."""
+        output = GenerationOutput(
+            text="Response text",
+            token_ids=[1, 2],
+            hidden_states=None,
+            attention_weights=None,
+            metadata={"inference_time_ms": 50.0, "input_tokens": 5},
+        )
+
+        with patch("src.transport.http.GPUManager"):
+            with patch("src.transport.http.LoaderRegistry") as mock_registry:
+                mock_registry.return_value.load.return_value = mock_loaded_model
+                mock_registry.return_value.generate.return_value = output
+
+                mock_loaded_model.tokenizer.apply_chat_template = MagicMock(
+                    return_value="Hello"
+                )
+
+                app = create_http_app(mock_config)
+                client = TestClient(app)
+
+                response = client.post(
+                    "/v1/chat/completions",
+                    json={
+                        "model": "test-model",
+                        "messages": [{"role": "user", "content": "Hello"}],
+                        "return_hidden_states": False,
+                    },
+                )
+
+                assert response.status_code == 200
+                data = response.json()
+                assert data["hidden_state"] is None
+
+    def test_chat_completion_fallback_no_template(
+        self,
+        mock_config,
+        mock_loaded_model,
+        mock_generation_output,
+    ):
+        """Test chat completion falls back when no chat template available."""
+        mock_generation_output.metadata["input_tokens"] = 10
+
+        with patch("src.transport.http.GPUManager"):
+            with patch("src.transport.http.LoaderRegistry") as mock_registry:
+                mock_registry.return_value.load.return_value = mock_loaded_model
+                mock_registry.return_value.generate.return_value = mock_generation_output
+
+                # Remove apply_chat_template method
+                del mock_loaded_model.tokenizer.apply_chat_template
+
+                app = create_http_app(mock_config)
+                client = TestClient(app)
+
+                response = client.post(
+                    "/v1/chat/completions",
+                    json={
+                        "model": "test-model",
+                        "messages": [
+                            {"role": "system", "content": "You are helpful."},
+                            {"role": "user", "content": "Hello"},
+                        ],
+                    },
+                )
+
+                assert response.status_code == 200
+                # Verify the generate call was made with fallback-formatted prompt
+                call_args = mock_registry.return_value.generate.call_args
+                prompt = call_args.kwargs.get("prompt")
+                assert "System: You are helpful." in prompt
+                assert "User: Hello" in prompt
+                assert "Assistant:" in prompt
+
+    def test_chat_completion_streaming_not_implemented(self, mock_config):
+        """Test streaming returns 501 Not Implemented."""
+        with patch("src.transport.http.GPUManager"):
+            app = create_http_app(mock_config)
+            client = TestClient(app)
+
+            response = client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "test-model",
+                    "messages": [{"role": "user", "content": "Hello"}],
+                    "stream": True,
+                },
+            )
+
+            assert response.status_code == 501
+            assert "not yet implemented" in response.json()["detail"].lower()
+
+    def test_chat_completion_missing_messages(self, mock_config):
+        """Test validation error when messages missing."""
+        with patch("src.transport.http.GPUManager"):
+            app = create_http_app(mock_config)
+            client = TestClient(app)
+
+            response = client.post(
+                "/v1/chat/completions",
+                json={"model": "test-model"},  # Missing messages
+            )
+
+            assert response.status_code == 422
+
+    def test_chat_completion_empty_messages(self, mock_config):
+        """Test validation error when messages array empty."""
+        with patch("src.transport.http.GPUManager"):
+            app = create_http_app(mock_config)
+            client = TestClient(app)
+
+            response = client.post(
+                "/v1/chat/completions",
+                json={"model": "test-model", "messages": []},
+            )
+
+            assert response.status_code == 422
+
+
+class TestV1GenerateAlias:
+    """Tests for /v1/generate alias endpoint."""
+
+    def test_v1_generate_alias_works(
+        self,
+        mock_config,
+        mock_loaded_model,
+        mock_generation_output,
+    ):
+        """Test /v1/generate works as alias for /generate."""
+        with patch("src.transport.http.GPUManager"):
+            with patch("src.transport.http.LoaderRegistry") as mock_registry:
+                mock_registry.return_value.load.return_value = mock_loaded_model
+                mock_registry.return_value.generate.return_value = mock_generation_output
+
+                app = create_http_app(mock_config)
+                client = TestClient(app)
+
+                response = client.post(
+                    "/v1/generate",
+                    json={
+                        "model": "test-model",
+                        "prompt": "Hello",
+                        "max_tokens": 10,
+                    },
+                )
+
+                assert response.status_code == 200
+                data = response.json()
+                assert data["text"] == "Hello, world!"

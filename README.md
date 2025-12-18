@@ -114,6 +114,56 @@ Extract embeddings with configurable pooling.
 }
 ```
 
+### POST /v1/chat/completions (WeaverCode Integration)
+
+OpenAI-compatible chat completions with hidden state extraction. Designed for integration with [WeaverCode](https://github.com/r3d91ll/weaver-code) and other AI orchestration tools.
+
+**Request:**
+```json
+{
+  "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+  "messages": [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "Hello!"}
+  ],
+  "max_tokens": 256,
+  "temperature": 0.7,
+  "return_hidden_states": true
+}
+```
+
+**Response:**
+```json
+{
+  "text": "Hello! How can I help you today?",
+  "usage": {
+    "prompt_tokens": 45,
+    "completion_tokens": 12,
+    "total_tokens": 57
+  },
+  "hidden_state": {
+    "final": [0.123, -0.456, ...],
+    "shape": [1, 2048],
+    "layer": -1,
+    "dtype": "float16"
+  },
+  "metadata": {
+    "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+    "latency_ms": 1234.5,
+    "tokens_per_second": 45.2
+  }
+}
+```
+
+Key features:
+- **Chat template support**: Automatically applies model-specific chat templates
+- **Token usage breakdown**: Separate prompt/completion token counts
+- **Hidden state in WeaverCode format**: `hidden_state.final` contains the boundary object vector
+
+### POST /v1/generate
+
+Alias for `/generate` with `/v1/` prefix for API consistency.
+
 ### POST /generate/stream
 
 Server-sent events streaming with optional hidden states at completion.
