@@ -398,6 +398,121 @@ Supported modes: `4bit`, `8bit`, `gptq`, `awq`
 
 Requires `bitsandbytes` for 4bit/8bit (included in Docker image).
 
+## Example Outputs
+
+Real outputs from integration tests showing the actual format and data.
+
+### Hidden State Extraction (Generation)
+
+```json
+{
+  "request": {
+    "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+    "prompt": "The meaning of life is",
+    "max_tokens": 20,
+    "return_hidden_states": true,
+    "hidden_state_layers": [-1]
+  },
+  "response": {
+    "text": "to have fun, while having fun you are having too much fun.",
+    "token_count": 20,
+    "hidden_states": {
+      "-1": {
+        "shape": [1, 2048],
+        "dtype": "float16",
+        "data": [1.601, 0.593, -1.214, 5.285, 1.337, -2.666, ...]
+      }
+    },
+    "metadata": {
+      "inference_time_ms": 509.13,
+      "tokens_per_second": 39.28,
+      "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+    }
+  }
+}
+```
+
+### All Layers Extraction
+
+```json
+{
+  "request": {
+    "hidden_state_layers": "all"
+  },
+  "response": {
+    "num_layers_returned": 22,
+    "layer_keys": ["-22", "-21", "-20", ..., "-2", "-1"],
+    "first_layer_shape": [1, 2048],
+    "last_layer_shape": [1, 2048]
+  }
+}
+```
+
+### Full Sequence Hidden States (for Manifold Analysis)
+
+```json
+{
+  "request": {
+    "return_full_sequence": true
+  },
+  "response": {
+    "sequence_hidden_states": {
+      "-1": {
+        "shape": [5, 2048],
+        "interpretation": "5 tokens × 2048 hidden dimensions"
+      }
+    }
+  }
+}
+```
+
+### Embedding Extraction
+
+```json
+{
+  "request": {
+    "model": "BAAI/bge-small-en-v1.5",
+    "text": "The quick brown fox jumps over the lazy dog.",
+    "pooling": "mean",
+    "normalize": true
+  },
+  "response": {
+    "shape": [384],
+    "embedding": [-0.104, -0.013, -0.009, 0.107, ...],
+    "l2_norm": 1.0
+  }
+}
+```
+
+### Base64 Format (Efficient Transfer)
+
+For large hidden states, use `hidden_state_format: "base64"`:
+
+```json
+{
+  "hidden_states": {
+    "-1": {
+      "shape": [1, 2048],
+      "dtype": "float32",
+      "encoding": "base64",
+      "data": "AIBiPgAgIEAA4D2/AICIPwCgNz8..."
+    }
+  }
+}
+```
+
+**Decoding in Python:**
+```python
+import base64
+import numpy as np
+
+decoded = base64.b64decode(layer_data['data'])
+array = np.frombuffer(decoded, dtype=np.float32)
+array = array.reshape(layer_data['shape'])
+```
+
+See `examples/outputs/` for complete sample responses from integration tests.
+
 ## Known Limitations
 
 **This is a research tool, not a production inference server.**

@@ -1,0 +1,50 @@
+{
+  "request": {
+    "model": "BAAI/bge-small-en-v1.5",
+    "texts": [
+      "First sentence about machine learning.",
+      "Second sentence about natural language processing.",
+      "Third sentence about neural networks."
+    ],
+    "pooling": "mean",
+    "normalize": true
+  },
+  "response": {
+    "texts_processed": 3,
+    "total_time_ms": 12.12620735168457,
+    "shapes": [
+      [
+        384
+      ],
+      [
+        384
+      ],
+      [
+        384
+      ]
+    ],
+    "embeddings_preview": [
+      [
+        -0.016830080802428427,
+        -0.020863137745410057,
+        -0.008202526563537248,
+        -0.045608884725293244,
+        0.020792791227386996
+      ],
+      [
+        -0.02543895233926658,
+        -0.021153810657070508,
+        -0.01657180246357517,
+        -0.030866897562766893,
+        0.0174671331159936
+      ],
+      [
+        -0.03552719053316565,
+        -0.03187030378847921,
+        -0.030449394161534075,
+        0.017204324849987008,
+        0.04161851366061071
+      ]
+    ]
+  }
+}

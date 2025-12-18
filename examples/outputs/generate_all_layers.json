@@ -1,0 +1,46 @@
+{
+  "request": {
+    "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+    "hidden_state_layers": "all"
+  },
+  "response": {
+    "num_layers_returned": 22,
+    "layer_keys": [
+      "-22",
+      "-21",
+      "-20",
+      "-19",
+      "-18",
+      "-17",
+      "-16",
+      "-15",
+      "-14",
+      "-13",
+      "-12",
+      "-11",
+      "-10",
+      "-9",
+      "-8",
+      "-7",
+      "-6",
+      "-5",
+      "-4",
+      "-3",
+      "-2",
+      "-1"
+    ],
+    "first_layer_shape": [
+      1,
+      2048
+    ],
+    "last_layer_shape": [
+      1,
+      2048
+    ]
+  },
+  "validation": {
+    "expected_layers": 22,
+    "actual_layers": 22,
+    "matches": true
+  }
+}
