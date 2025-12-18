@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any, cast
 
 from fastapi import FastAPI, HTTPException, Request
@@ -444,27 +446,31 @@ class ModelLoadResponse(BaseModel):
 
 
 class ModelManager:
-    """Manages loaded models with LRU eviction and multi-loader support."""
+    """Manages loaded models with LRU eviction, auto-unload, and multi-loader support."""
 
     def __init__(
         self,
         gpu_manager: GPUManager,
         registry: LoaderRegistry,
         max_models: int = 3,
+        auto_unload_minutes: int = 20,
     ):
         """
         Create a ModelManager that loads and manages models with an LRU eviction policy.
-        
+
         Parameters:
             gpu_manager: Manager responsible for GPU device allocation and cache management.
             registry: Loader registry used to resolve and load models.
             max_models (int): Maximum number of models to keep loaded simultaneously; older models are evicted when capacity is exceeded.
+            auto_unload_minutes (int): Auto-unload models after this many minutes of inactivity (0 = disabled).
         """
         self.gpu_manager = gpu_manager
         self.registry = registry
         self.max_models = max_models
+        self.auto_unload_minutes = auto_unload_minutes
         self.loaded_models: dict[str, LoadedModel] = {}
         self.access_order: list[str] = []  # For LRU eviction
+        self.last_accessed: dict[str, float] = {}  # Track last access time per model
 
     def get_or_load(
         self,
@@ -493,6 +499,7 @@ class ModelManager:
             if model_id in self.access_order:
                 self.access_order.remove(model_id)
             self.access_order.append(model_id)
+            self.last_accessed[model_id] = time.time()
             return self.loaded_models[model_id]
 
         # Evict if at capacity
@@ -515,13 +522,14 @@ class ModelManager:
 
         self.loaded_models[model_id] = loaded
         self.access_order.append(model_id)
+        self.last_accessed[model_id] = time.time()
 
         return loaded
 
     def _evict_oldest(self) -> None:
         """
         Remove the least-recently-used model from the manager and clear the GPU cache.
-        
+
         If no models are loaded, this is a no-op.
         """
         if not self.access_order:
@@ -531,17 +539,18 @@ class ModelManager:
         if oldest in self.loaded_models:
             logger.info(f"Evicting model: {oldest}")
             del self.loaded_models[oldest]
+            self.last_accessed.pop(oldest, None)
             self.gpu_manager.clear_cache()
 
     def unload(self, model_id: str) -> bool:
         """
         Unload the specified loaded model from memory and clear related GPU cache.
-        
+
         Clears the GPU cache and logs the unload when a model is removed.
-        
+
         Parameters:
             model_id (str): Identifier of the model to unload.
-        
+
         Returns:
             bool: True if the model was loaded and successfully unloaded, False if the model was not found.
         """
@@ -551,9 +560,53 @@ class ModelManager:
         del self.loaded_models[model_id]
         if model_id in self.access_order:
             self.access_order.remove(model_id)
+        self.last_accessed.pop(model_id, None)
         self.gpu_manager.clear_cache()
         logger.info(f"Unloaded model: {model_id}")
         return True
+
+    def check_idle_models(self) -> list[str]:
+        """
+        Check for and unload models that have been idle longer than auto_unload_minutes.
+
+        Returns:
+            list[str]: List of model IDs that were unloaded due to inactivity.
+        """
+        if self.auto_unload_minutes <= 0:
+            return []
+
+        unloaded = []
+        current_time = time.time()
+        timeout_seconds = self.auto_unload_minutes * 60
+
+        # Create a copy of keys to avoid modification during iteration
+        for model_id in list(self.loaded_models.keys()):
+            last_access = self.last_accessed.get(model_id, current_time)
+            idle_seconds = current_time - last_access
+
+            if idle_seconds >= timeout_seconds:
+                logger.info(
+                    f"Auto-unloading idle model: {model_id} "
+                    f"(idle for {idle_seconds / 60:.1f} minutes)"
+                )
+                self.unload(model_id)
+                unloaded.append(model_id)
+
+        return unloaded
+
+    def get_idle_time(self, model_id: str) -> float | None:
+        """
+        Get how long a model has been idle in seconds.
+
+        Parameters:
+            model_id (str): Model identifier.
+
+        Returns:
+            float | None: Seconds since last access, or None if model not loaded.
+        """
+        if model_id not in self.last_accessed:
+            return None
+        return time.time() - self.last_accessed[model_id]
 
     def list_loaded(self) -> list[str]:
         """
@@ -567,7 +620,7 @@ class ModelManager:
     def get_loaded_info(self) -> list[dict[str, Any]]:
         """
         Return a list of dictionaries describing each currently loaded model.
-        
+
         Each dictionary contains:
         - `model_id`: model identifier string
         - `device`: device identifier (e.g., "cuda:0" or "cpu")
@@ -576,12 +629,23 @@ class ModelManager:
         - `num_layers`: number of model layers
         - `loader_type`: name of the loader used to load the model
         - `quantization`: quantization metadata value or "none" if not present
-        
+        - `idle_seconds`: seconds since last access
+        - `auto_unload_at`: remaining seconds until auto-unload (None if disabled)
+
         Returns:
             list[dict[str, Any]]: List of per-model information dictionaries.
         """
-        return [
-            {
+        result = []
+        current_time = time.time()
+        timeout_seconds = self.auto_unload_minutes * 60 if self.auto_unload_minutes > 0 else None
+
+        for model in self.loaded_models.values():
+            idle_seconds = current_time - self.last_accessed.get(model.model_id, current_time)
+            auto_unload_in = None
+            if timeout_seconds is not None:
+                auto_unload_in = max(0, timeout_seconds - idle_seconds)
+
+            result.append({
                 "model_id": model.model_id,
                 "device": str(model.device),
                 "dtype": str(model.dtype).replace("torch.", ""),
@@ -589,9 +653,11 @@ class ModelManager:
                 "num_layers": model.num_layers,
                 "loader_type": model.loader_type,
                 "quantization": model.metadata.get("quantization", "none"),
-            }
-            for model in self.loaded_models.values()
-        ]
+                "idle_seconds": round(idle_seconds, 1),
+                "auto_unload_in": round(auto_unload_in, 1) if auto_unload_in is not None else None,
+            })
+
+        return result
 
 
 # ============================================================================
@@ -651,10 +717,65 @@ def create_http_app(config: Config | None = None) -> FastAPI:
     if config is None:
         config = get_config()
 
+    # Initialize components first (needed by lifespan)
+    gpu_manager = GPUManager(
+        allowed_devices=config.gpu.devices,
+        memory_fraction=config.gpu.memory_fraction,
+    )
+
+    # Create loader registry with model overrides from config
+    registry = LoaderRegistry(loader_configs=config.model_overrides)
+
+    model_manager = ModelManager(
+        gpu_manager=gpu_manager,
+        registry=registry,
+        max_models=config.models.max_loaded,
+        auto_unload_minutes=config.models.auto_unload_minutes,
+    )
+
+    # Background task state
+    auto_unload_task: asyncio.Task[None] | None = None
+
+    async def auto_unload_checker(manager: ModelManager, check_interval: int = 60) -> None:
+        """Background task to check and unload idle models."""
+        while True:
+            try:
+                await asyncio.sleep(check_interval)
+                unloaded = manager.check_idle_models()
+                if unloaded:
+                    set_models_loaded(len(manager.list_loaded()))
+            except asyncio.CancelledError:
+                logger.info("Auto-unload checker stopped")
+                break
+            except Exception as e:
+                logger.error(f"Error in auto-unload checker: {e}")
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        """Manage app lifespan - start/stop background tasks."""
+        nonlocal auto_unload_task
+        # Startup: start the background task if auto-unload is enabled
+        if config.models.auto_unload_minutes > 0:
+            logger.info(
+                f"Starting auto-unload checker (timeout: {config.models.auto_unload_minutes} min)"
+            )
+            auto_unload_task = asyncio.create_task(
+                auto_unload_checker(model_manager, check_interval=60)
+            )
+        yield
+        # Shutdown: cancel the background task
+        if auto_unload_task is not None:
+            auto_unload_task.cancel()
+            try:
+                await auto_unload_task
+            except asyncio.CancelledError:
+                pass
+
     app = FastAPI(
         title="The Loom",
         description="Hidden state extraction server for AI research - part of the Weaver ecosystem",
         version="0.2.0",
+        lifespan=lifespan,
     )
 
     # CORS middleware for browser-based clients
@@ -671,21 +792,6 @@ def create_http_app(config: Config | None = None) -> FastAPI:
     # Metrics middleware (only if prometheus_client is available)
     if is_metrics_available():
         app.add_middleware(MetricsMiddleware)
-
-    # Initialize components
-    gpu_manager = GPUManager(
-        allowed_devices=config.gpu.devices,
-        memory_fraction=config.gpu.memory_fraction,
-    )
-
-    # Create loader registry with model overrides from config
-    registry = LoaderRegistry(loader_configs=config.model_overrides)
-
-    model_manager = ModelManager(
-        gpu_manager=gpu_manager,
-        registry=registry,
-        max_models=config.models.max_loaded,
-    )
 
     # Store in app state
     app.state.config = config
@@ -733,15 +839,17 @@ def create_http_app(config: Config | None = None) -> FastAPI:
     async def list_models() -> dict[str, Any]:
         """
         Return information about currently loaded models and the configured maximum.
-        
+
         Returns:
-            info (dict): Dictionary with two keys:
-                - "loaded_models": a list of dictionaries, each containing details for a loaded model (id, device, dtype, hidden_size, num_layers, loader_type, quantization).
-                - "max_models": the configured maximum number of models allowed to be loaded (int).
+            info (dict): Dictionary with keys:
+                - "loaded_models": a list of dictionaries, each containing details for a loaded model.
+                - "max_models": the configured maximum number of models allowed to be loaded.
+                - "auto_unload_minutes": minutes of inactivity before auto-unload (0 = disabled).
         """
         return {
             "loaded_models": model_manager.get_loaded_info(),
             "max_models": config.models.max_loaded,
+            "auto_unload_minutes": config.models.auto_unload_minutes,
         }
 
     @app.get("/loaders")

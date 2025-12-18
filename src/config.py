@@ -65,6 +65,11 @@ class ModelsConfig(BaseModel):
     trust_remote_code: bool = Field(
         default=True, description="Allow remote code execution for custom architectures"
     )
+    auto_unload_minutes: int = Field(
+        default=20,
+        ge=0,
+        description="Auto-unload models after this many minutes of inactivity (0 = disabled)",
+    )
 
 
 class LoadersConfig(BaseModel):

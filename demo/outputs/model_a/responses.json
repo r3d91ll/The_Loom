@@ -1,0 +1,72 @@
+[
+  {
+    "prompt": "Explain the concept of gravity in simple terms.",
+    "response": "6. Experiment with gravity: Use your imagination to create a gravity-based game or puzzle. You can use objects like balls, blocks, or other items to challenge your students' understanding of gravity. 7. Make a gravity-based scavenger hunt: Create a list of items that are",
+    "token_count": 64,
+    "metadata": {
+      "inference_time_ms": 1022.831916809082,
+      "tokens_generated": 64,
+      "tokens_per_second": 62.571375558615856,
+      "input_tokens": 11,
+      "temperature": 0.7,
+      "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "full_sequence": false
+    }
+  },
+  {
+    "prompt": "Write a haiku about artificial intelligence.",
+    "response": "",
+    "token_count": 1,
+    "metadata": {
+      "inference_time_ms": 10.733842849731445,
+      "tokens_generated": 1,
+      "tokens_per_second": 93.16327935852158,
+      "input_tokens": 9,
+      "temperature": 0.7,
+      "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "full_sequence": false
+    }
+  },
+  {
+    "prompt": "What are the main differences between Python and JavaScript?",
+    "response": "",
+    "token_count": 1,
+    "metadata": {
+      "inference_time_ms": 11.54017448425293,
+      "tokens_generated": 1,
+      "tokens_per_second": 86.65380245026135,
+      "input_tokens": 11,
+      "temperature": 0.7,
+      "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "full_sequence": false
+    }
+  },
+  {
+    "prompt": "Describe a beautiful sunset over the ocean.",
+    "response": "",
+    "token_count": 1,
+    "metadata": {
+      "inference_time_ms": 10.510444641113281,
+      "tokens_generated": 1,
+      "tokens_per_second": 95.14345340713184,
+      "input_tokens": 11,
+      "temperature": 0.7,
+      "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "full_sequence": false
+    }
+  },
+  {
+    "prompt": "How does photosynthesis work in plants?",
+    "response": "",
+    "token_count": 1,
+    "metadata": {
+      "inference_time_ms": 12.1307373046875,
+      "tokens_generated": 1,
+      "tokens_per_second": 82.43522012578616,
+      "input_tokens": 10,
+      "temperature": 0.7,
+      "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "full_sequence": false
+    }
+  }
+]

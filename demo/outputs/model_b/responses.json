@@ -1,0 +1,72 @@
+[
+  {
+    "prompt": "Explain the concept of gravity in simple terms.",
+    "response": " Gravity is a fundamental force of nature that attracts two objects towards each other, even if they are at different distances from each other. It is caused by the mass and size of the objects involved, as well as their distance apart.\n\nThe strength of gravitational attraction between two objects depends on several factors, including:\n\n1. Mass",
+    "token_count": 64,
+    "metadata": {
+      "inference_time_ms": 691.4880275726318,
+      "tokens_generated": 64,
+      "tokens_per_second": 92.55402472355551,
+      "input_tokens": 10,
+      "temperature": 0.7,
+      "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+      "full_sequence": false
+    }
+  },
+  {
+    "prompt": "Write a haiku about artificial intelligence.",
+    "response": " Artificially intelligent,  \nNavigating the digital landscape,  \nChasing new opportunities.  \n\nThe answer is simple: AI enhances human capabilities,\nTransforming industries and improving quality of life.\nIts impact on society is undeniable.\n\nWould you like to explore another topic? Please let me know! \ud83c\udf1f\u2728\n\nI'm",
+    "token_count": 64,
+    "metadata": {
+      "inference_time_ms": 780.0519466400146,
+      "tokens_generated": 64,
+      "tokens_per_second": 82.04581794285976,
+      "input_tokens": 8,
+      "temperature": 0.7,
+      "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+      "full_sequence": false
+    }
+  },
+  {
+    "prompt": "What are the main differences between Python and JavaScript?",
+    "response": "Python is a high-level, interpreted language that was developed by Guido van Rossum. It has a syntax similar to C++ but with features like function overloading, classes, and decorators.\n\nJavaScript, on the other hand, is an object-oriented programming (OOP) language created by Brendan Eich in 1",
+    "token_count": 64,
+    "metadata": {
+      "inference_time_ms": 647.9232311248779,
+      "tokens_generated": 64,
+      "tokens_per_second": 98.77713427389813,
+      "input_tokens": 10,
+      "temperature": 0.7,
+      "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+      "full_sequence": false
+    }
+  },
+  {
+    "prompt": "Describe a beautiful sunset over the ocean.",
+    "response": " The sun rises high in the sky, painting the horizon with fiery hues of orange and pink. As the light dances through the clouds, it creates an awe-inspiring spectacle that is both breathtaking and serene at the same time.\n\nThe colors blend together to create a mesmerizing gradient, from deep reds to soft pinks",
+    "token_count": 64,
+    "metadata": {
+      "inference_time_ms": 623.1429576873779,
+      "tokens_generated": 64,
+      "tokens_per_second": 102.7051645380351,
+      "input_tokens": 8,
+      "temperature": 0.7,
+      "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+      "full_sequence": false
+    }
+  },
+  {
+    "prompt": "How does photosynthesis work in plants?",
+    "response": " Photosynthesis is the process by which plants use sunlight to convert carbon dioxide and water into glucose (a type of sugar) and oxygen. Here's a basic breakdown of how it works:\n\n1. Light absorption: Plants have two main types of light receptors, known as chlorophyll and luciferase.\n\n2. Light",
+    "token_count": 64,
+    "metadata": {
+      "inference_time_ms": 617.3367500305176,
+      "tokens_generated": 64,
+      "tokens_per_second": 103.67113248455759,
+      "input_tokens": 8,
+      "temperature": 0.7,
+      "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+      "full_sequence": false
+    }
+  }
+]
