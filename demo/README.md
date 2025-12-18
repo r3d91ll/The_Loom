@@ -68,6 +68,8 @@ By default, the demo uses small models that fit on most GPUs:
 | TinyLlama 1.1B Chat | cuda:0 | ~2.2GB VRAM |
 | Qwen2.5 0.5B Instruct | cuda:1 | ~1GB VRAM |
 
+> **Note on Response Quality:** Chat models (TinyLlama, Qwen) may produce short or empty text responses when given raw prompts without proper chat template formatting. This is expected behavior - the demo uses raw prompts to enable all-layers hidden state extraction. The geometric analysis remains valid regardless of text output length since we analyze the hidden state representations, not the generated text.
+
 ## Understanding the Metrics
 
 ### D_eff (Effective Dimensionality)
