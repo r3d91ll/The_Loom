@@ -2,6 +2,16 @@
 
 **Hidden state extraction for transformer models** - the capability that production inference servers don't provide.
 
+> **⚠️ Research Tool - Not for Production**
+>
+> The Loom is designed for **ML research and experimentation**, not production deployments. Use it for:
+> - Local development and prototyping
+> - Cloud-based research (RunPod, Lambda Labs, etc.)
+> - Interpretability and alignment research
+> - Model analysis and comparison
+>
+> For production inference, use [vLLM](https://github.com/vllm-project/vllm), [TGI](https://github.com/huggingface/text-generation-inference), or similar optimized servers.
+
 ## The Problem
 
 Production inference servers (vLLM, Ollama, TGI, llama.cpp) are optimized for throughput. They don't expose the final hidden state - the geometric representation of meaning *before* text generation.
