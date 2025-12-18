@@ -5,10 +5,11 @@
     2048
   ],
   "dtype": "float32",
-  "encoded_sample": "AIBiPgAgIEAA4D2/AICIPwCgNz8A4OS/AMBCPwBg8z8A4NC/AAACvwBgAsAAAM8/AABxvgCAk78AgLI/AAAQQABA8T4AoDi/AIAe...",
+  "bytes_per_element": 4,
+  "encoded_sample": "AMBBQACAsz8AIELAAKC3PgCADT4AgCrAACDtPABgvb4A4DQ+AAAAvwAAyL8AIFw+AOBOvwAA8L8AYI8+AGALPwCA7z4AgCa/AMAZ...",
   "decoding_instructions": [
     "1. Base64 decode the 'data' field",
-    "2. Interpret as float32 array",
+    "2. Interpret as float32 array (4 bytes/element)",
     "3. Reshape according to 'shape' field"
   ],
   "python_example": "import base64\nimport numpy as np\n\ndecoded = base64.b64decode(layer_data['data'])\narray = np.frombuffer(decoded, dtype=np.float32)\narray = array.reshape(layer_data['shape'])"
