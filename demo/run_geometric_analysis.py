@@ -60,13 +60,8 @@ except ImportError:
     print("Warning: matplotlib not installed. Visualizations will be skipped.")
     print("Install with: pip install matplotlib")
 
-try:
-    from sklearn.decomposition import PCA
-    HAS_SKLEARN = True
-except ImportError:
-    HAS_SKLEARN = False
-    print("Warning: scikit-learn not installed. PCA visualizations will be skipped.")
-    print("Install with: pip install scikit-learn")
+# Note: sklearn PCA could be used for more principled D_eff computation,
+# but the current cumulative energy approach works well for this demo.
 
 
 # =============================================================================
@@ -130,47 +125,21 @@ class ModelResults:
 # =============================================================================
 
 def compute_d_eff(hidden_state: np.ndarray, variance_threshold: float = 0.90) -> float:
-    """Compute effective dimensionality via PCA.
+    """Compute effective dimensionality via cumulative energy distribution.
 
     D_eff represents the number of dimensions needed to capture
-    variance_threshold of the variance in the hidden state.
+    variance_threshold of the total squared magnitude (energy) in the hidden state.
+
+    This is a simplified approximation that doesn't require PCA - it sorts
+    the squared values and finds how many are needed to reach the threshold.
 
     Args:
         hidden_state: 1D array of hidden state values
-        variance_threshold: Fraction of variance to capture (default 90%)
+        variance_threshold: Fraction of energy to capture (default 90%)
 
     Returns:
-        Effective dimensionality (float for interpolation)
+        Effective dimensionality (float, clamped to [1, len(hidden_state)])
     """
-    if not HAS_SKLEARN:
-        # Fallback: use variance ratio approximation
-        variance = np.var(hidden_state)
-        if variance == 0:
-            return 1.0
-        # Simple heuristic based on how spread out values are
-        sorted_sq = np.sort(hidden_state ** 2)[::-1]
-        cumsum = np.cumsum(sorted_sq)
-        total = cumsum[-1]
-        if total == 0:
-            return 1.0
-        normalized = cumsum / total
-        d_eff = np.searchsorted(normalized, variance_threshold) + 1
-        return float(min(d_eff, len(hidden_state)))
-
-    # Reshape for PCA (need 2D: samples x features)
-    # For a single hidden state, we treat each dimension as a "sample"
-    # and compute how many principal components explain the variance
-    X = hidden_state.reshape(-1, 1)
-
-    # Center the data
-    X_centered = X - X.mean()
-
-    # Compute variance per dimension (simplified for 1D case)
-    total_var = np.var(hidden_state)
-    if total_var == 0:
-        return 1.0
-
-    # For a single vector, D_eff is based on how concentrated the values are
     # Use squared values as proxy for "energy" distribution
     squared = hidden_state ** 2
     sorted_sq = np.sort(squared)[::-1]
@@ -263,26 +232,80 @@ class LoomClient:
         self,
         model_id: str,
         prompt: str,
-        max_tokens: int = 128,
+        max_tokens: int = 64,
         temperature: float = 0.7,
         return_hidden_states: bool = True,
         hidden_state_layers: list[int] | str = "all",
+        use_chat_template: bool = False,  # False for all-layers extraction
     ) -> dict[str, Any]:
-        """Generate text with hidden state extraction."""
-        response = self.client.post(
-            f"{self.base_url}/generate",
-            json={
-                "model": model_id,
-                "prompt": prompt,
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "return_hidden_states": return_hidden_states,
-                "hidden_state_layers": hidden_state_layers,
-                "hidden_state_format": "list",  # Use list for easier numpy conversion
-            },
-        )
-        response.raise_for_status()
-        return response.json()
+        """Generate text with hidden state extraction.
+
+        Args:
+            model_id: Model identifier
+            prompt: Input prompt (will be wrapped as user message if use_chat_template=True)
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature
+            return_hidden_states: Whether to return hidden states
+            hidden_state_layers: Which layers to extract ("all" or list of indices)
+            use_chat_template: If True, use /v1/chat/completions with chat templates
+        """
+        if use_chat_template:
+            # Use chat completions endpoint for proper chat template handling
+            response = self.client.post(
+                f"{self.base_url}/v1/chat/completions",
+                json={
+                    "model": model_id,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "return_hidden_states": return_hidden_states,
+                },
+            )
+            response.raise_for_status()
+            result = response.json()
+            # Convert chat completion response to match generate format
+            return {
+                "text": result.get("text", ""),
+                "token_count": result.get("usage", {}).get("completion_tokens", 0),
+                "hidden_states": self._convert_chat_hidden_states(result, hidden_state_layers),
+                "metadata": result.get("metadata", {}),
+            }
+        else:
+            # Use raw generate endpoint
+            response = self.client.post(
+                f"{self.base_url}/generate",
+                json={
+                    "model": model_id,
+                    "prompt": prompt,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "return_hidden_states": return_hidden_states,
+                    "hidden_state_layers": hidden_state_layers,
+                    "hidden_state_format": "list",
+                },
+            )
+            response.raise_for_status()
+            return response.json()
+
+    def _convert_chat_hidden_states(
+        self,
+        result: dict[str, Any],
+        hidden_state_layers: list[int] | str,
+    ) -> dict[str, Any]:
+        """Convert chat completion hidden state format to generate format."""
+        hidden_state = result.get("hidden_state")
+        if not hidden_state:
+            return {}
+
+        # Chat completions only return final layer, format it like generate
+        layer_key = str(hidden_state.get("layer", -1))
+        return {
+            layer_key: {
+                "data": hidden_state.get("final", []),
+                "shape": hidden_state.get("shape", []),
+                "dtype": hidden_state.get("dtype", "float32"),
+            }
+        }
 
     def list_models(self) -> dict[str, Any]:
         """List loaded models."""
