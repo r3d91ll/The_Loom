@@ -1,0 +1,13 @@
+# The Loom - Demo Configuration
+# Both GPUs enabled for geometric analysis demo
+
+gpu:
+  devices: [0, 1]
+  default_device: 0
+  memory_fraction: 0.9
+
+models:
+  max_loaded: 3
+
+hidden_states:
+  default_layers: [-1]

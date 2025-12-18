@@ -1,0 +1,72 @@
+[
+  {
+    "prompt": "Explain the concept of gravity in simple terms.",
+    "response": " Gravity is a force that attracts objects towards each other, like when you pull on a ball with your hand and it pulls back. It's also responsible for many natural phenomena such as rain falling from the sky or tides moving across the ocean.\n\nGravity works by creating a field around the masses of objects, which causes them",
+    "token_count": 64,
+    "metadata": {
+      "inference_time_ms": 666.0659313201904,
+      "tokens_generated": 64,
+      "tokens_per_second": 96.08658391091616,
+      "input_tokens": 10,
+      "temperature": 0.7,
+      "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+      "full_sequence": false
+    }
+  },
+  {
+    "prompt": "Write a haiku about artificial intelligence.",
+    "response": " Artificial intelligence is like a\nmachine that knows more than humans do,  \nBut it's not really human at all.\nIt learns from data and changes over time.  \nAI can make decisions, but it's always evolving.  \nThe future of AI is exciting, but also uncertain.  \nAI is here to stay,",
+    "token_count": 64,
+    "metadata": {
+      "inference_time_ms": 594.2249298095703,
+      "tokens_generated": 64,
+      "tokens_per_second": 107.70332375740263,
+      "input_tokens": 8,
+      "temperature": 0.7,
+      "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+      "full_sequence": false
+    }
+  },
+  {
+    "prompt": "What are the main differences between Python and JavaScript?",
+    "response": " \n1. Syntax: While both languages use indentation to define blocks of code, Python uses curly braces ({}) for block-level statements, while JavaScript uses straight brackets ([]).\n2. Data types: Python supports multiple data types including integers, floats, strings, lists, tuples, dictionaries, and sets. JavaScript also supports various",
+    "token_count": 64,
+    "metadata": {
+      "inference_time_ms": 597.8152751922607,
+      "tokens_generated": 64,
+      "tokens_per_second": 107.05648158524762,
+      "input_tokens": 10,
+      "temperature": 0.7,
+      "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+      "full_sequence": false
+    }
+  },
+  {
+    "prompt": "Describe a beautiful sunset over the ocean.",
+    "response": " I'm sorry, but as an AI language model, I do not have the ability to see or experience physical sensations like beauty. However, I can describe the visual appearance of a beautiful sunset over the ocean.\n\nA beautiful sunset over the ocean typically features a deep red color with a warm orange tint, creating a calming and",
+    "token_count": 64,
+    "metadata": {
+      "inference_time_ms": 594.7434902191162,
+      "tokens_generated": 64,
+      "tokens_per_second": 107.60941658465406,
+      "input_tokens": 8,
+      "temperature": 0.7,
+      "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+      "full_sequence": false
+    }
+  },
+  {
+    "prompt": "How does photosynthesis work in plants?",
+    "response": " Photosynthesis is a process by which plants convert light energy, stored in the chlorophyll within their leaves, into chemical energy that can be used to produce glucose (a type of sugar) and oxygen. Here's how it works:\n\n1. Light absorption: Chlorophyll molecules on the outer surface of plant cells absorb",
+    "token_count": 64,
+    "metadata": {
+      "inference_time_ms": 591.1271572113037,
+      "tokens_generated": 64,
+      "tokens_per_second": 108.2677376927256,
+      "input_tokens": 8,
+      "temperature": 0.7,
+      "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+      "full_sequence": false
+    }
+  }
+]

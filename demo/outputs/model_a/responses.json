@@ -1,0 +1,72 @@
+[
+  {
+    "prompt": "Explain the concept of gravity in simple terms.",
+    "response": "What is gravity, and how does it work?",
+    "token_count": 11,
+    "metadata": {
+      "inference_time_ms": 527.8372764587402,
+      "tokens_generated": 11,
+      "tokens_per_second": 20.839755906970023,
+      "input_tokens": 11,
+      "temperature": 0.7,
+      "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "full_sequence": false
+    }
+  },
+  {
+    "prompt": "Write a haiku about artificial intelligence.",
+    "response": "",
+    "token_count": 1,
+    "metadata": {
+      "inference_time_ms": 10.193347930908203,
+      "tokens_generated": 1,
+      "tokens_per_second": 98.10319502268794,
+      "input_tokens": 9,
+      "temperature": 0.7,
+      "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "full_sequence": false
+    }
+  },
+  {
+    "prompt": "What are the main differences between Python and JavaScript?",
+    "response": "",
+    "token_count": 1,
+    "metadata": {
+      "inference_time_ms": 10.810136795043945,
+      "tokens_generated": 1,
+      "tokens_per_second": 92.50576740698264,
+      "input_tokens": 11,
+      "temperature": 0.7,
+      "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "full_sequence": false
+    }
+  },
+  {
+    "prompt": "Describe a beautiful sunset over the ocean.",
+    "response": "",
+    "token_count": 1,
+    "metadata": {
+      "inference_time_ms": 9.422063827514648,
+      "tokens_generated": 1,
+      "tokens_per_second": 106.13385966244086,
+      "input_tokens": 11,
+      "temperature": 0.7,
+      "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "full_sequence": false
+    }
+  },
+  {
+    "prompt": "How does photosynthesis work in plants?",
+    "response": "",
+    "token_count": 1,
+    "metadata": {
+      "inference_time_ms": 9.29570198059082,
+      "tokens_generated": 1,
+      "tokens_per_second": 107.57659852778988,
+      "input_tokens": 10,
+      "temperature": 0.7,
+      "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "full_sequence": false
+    }
+  }
+]

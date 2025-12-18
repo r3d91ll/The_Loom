@@ -398,6 +398,34 @@ The Loom maintains up to `LOOM_MAX_MODELS` in memory (default: 3). When the limi
 LOOM_MAX_MODELS=5 poetry run loom
 ```
 
+### Auto-Unload Idle Models
+
+Models are automatically unloaded after a period of inactivity (default: 20 minutes). This frees GPU memory without manual intervention.
+
+```yaml
+# config.yaml
+models:
+  auto_unload_minutes: 20  # Set to 0 to disable
+```
+
+Check idle status via the `/models` endpoint:
+
+```json
+{
+  "loaded_models": [
+    {
+      "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+      "idle_seconds": 45.2,
+      "auto_unload_in": 1154.8
+    }
+  ],
+  "auto_unload_minutes": 20
+}
+```
+
+- `idle_seconds`: Time since last request to this model
+- `auto_unload_in`: Seconds until auto-unload (null if disabled)
+
 ## Configuration
 
 Environment variables:
@@ -407,6 +435,7 @@ Environment variables:
 | `LOOM_PORT` | 8080 | HTTP port |
 | `LOOM_HOST` | 0.0.0.0 | Bind address |
 | `LOOM_MAX_MODELS` | 3 | Max models in memory (LRU eviction) |
+| `LOOM_AUTO_UNLOAD_MINUTES` | 20 | Auto-unload idle models (0 = disabled) |
 | `LOOM_DEFAULT_DEVICE` | cuda:0 | Default GPU device |
 | `LOOM_MEMORY_FRACTION` | 0.9 | GPU memory fraction to use |
 | `HF_TOKEN` | - | HuggingFace token for gated models |
@@ -425,6 +454,7 @@ gpu:
 models:
   max_loaded: 3
   default_dtype: auto
+  auto_unload_minutes: 20  # 0 to disable
 
 hidden_states:
   default_layers: [-1]
@@ -635,6 +665,50 @@ Features under consideration for future releases:
 - [ ] **Attention weight extraction** - Return attention patterns alongside hidden states
 
 Want to contribute? See [CONTRIBUTING.md](CONTRIBUTING.md) or open an issue.
+
+## Demo: Geometric Analysis
+
+The Loom includes a demo that showcases multi-GPU hidden state extraction with geometric analysis. See `demo/` for complete scripts and pre-generated outputs.
+
+### Running the Demo
+
+```bash
+# Run geometric analysis on two models (requires 2 GPUs)
+poetry run python demo/run_geometric_analysis.py
+
+# Generate visualizations from existing data
+poetry run python demo/generate_visualizations.py
+```
+
+### Sample Visualizations
+
+The demo extracts hidden states from **all layers** of two models running on separate GPUs, then computes geometric metrics:
+
+**D_eff (Effective Dimensionality) by Layer:**
+
+![D_eff by Layer](demo/outputs/deff_by_layer.png)
+
+**β (Collapse Indicator) by Layer:**
+
+![Beta by Layer](demo/outputs/beta_by_layer.png)
+
+**Model Comparison (Normalized):**
+
+![Model Comparison](demo/outputs/model_comparison.png)
+
+### Key Metrics
+
+| Metric | TinyLlama 1.1B | Qwen2.5 0.5B |
+|--------|---------------|--------------|
+| Hidden Size | 2048 | 896 |
+| Layers | 22 | 24 |
+| Mean D_eff | 724.60 | 237.45 |
+| Mean β | 9.46 | 4.01 |
+
+- **D_eff** (Effective Dimensionality): Semantic richness of representations (higher = better)
+- **β** (Collapse Indicator): Dimensional compression diagnostic (lower = better)
+
+See `demo/outputs/metrics_summary.md` for complete analysis.
 
 ## Use Cases
 
